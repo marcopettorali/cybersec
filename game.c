@@ -4,17 +4,7 @@
 
 #include "util.h"
 
-#define GRID_WIDTH 7
-#define GRID_HEIGHT 6
-#define COMMAND_SIZE 128
-
-void print_straight_line() {
-    for (int i = 0; i < GRID_WIDTH * 4 + 1; i++) {
-        printf("-");
-    }
-    printf("\n");
-}
-
+//---- GRID UTIL ----//
 int get_element_at(int* game_grid, int row, int col) {
     if (row < 0 || row >= GRID_HEIGHT) {
         EXCEPTION("row boundaries exceeded", __func__);
@@ -42,6 +32,39 @@ void put_element_at(int* game_grid, int value, int row, int col) {
     *(game_grid + row * GRID_WIDTH + col) = value;
 }
 
+int is_column_full(int* game_grid, int col) {
+    if (col < 0 || col >= GRID_WIDTH) {
+        EXCEPTION("column boundaries exceeded", __func__);
+    }
+    return (get_element_at(game_grid, 0, col) != 0);
+}
+
+int insert_checker(int* game_grid, int player, int col) {
+    if (col < 0 || col >= GRID_WIDTH) {
+        return MSG_COLUMN_NOT_VALID;
+    }
+    if (player != 1 && player != -1) {
+        EXCEPTION("player must be either 1 or -1", __func__);
+    }
+    if (is_column_full(game_grid, col)) {
+        return MSG_COLUMN_FULL;
+    }
+
+    for (int i = GRID_HEIGHT - 1; i >= 0; i--) {
+        if (get_element_at(game_grid, i, col) == 0) {
+            put_element_at(game_grid, player, i, col);
+            return 1;
+        }
+    }
+}
+
+//----- GRAPHICS -----//
+void print_straight_line() {
+    for (int i = 0; i < GRID_WIDTH * 4 + 1; i++) {
+        printf("-");
+    }
+    printf("\n");
+}
 void print_game_grid(int* game_grid) {
     for (int i = 0; i < GRID_HEIGHT; i++) {
         print_straight_line();
@@ -63,39 +86,14 @@ void print_game_grid(int* game_grid) {
         printf("|\n");
     }
     print_straight_line();
+    for (int i = 0; i < GRID_WIDTH; i++) {
+        printf("  %d ", i);
+    }
+    printf("\n");
 }
 
-int is_column_full(int* game_grid, int col) {
-    if (col < 0 || col >= GRID_WIDTH) {
-        EXCEPTION("column boundaries exceeded", __func__);
-    }
-    return (get_element_at(game_grid, 0, col) != 0);
-}
-
-// returns 0 if the column is full or not existent, 1 otherwise
-int insert_checker(int* game_grid, int player, int col) {
-    if (col < 0 || col >= GRID_WIDTH) {
-        USER_WARNING("column boundaries exceeded", __func__);
-        return 0;
-    }
-    if (player != 1 && player != -1) {
-        EXCEPTION("player must be either 1 or -1", __func__);
-    }
-    if (is_column_full(game_grid, col)) {
-        USER_WARNING("Impossible to insert another checker in this column", __func__);
-        return 0;
-    }
-
-    for (int i = GRID_HEIGHT - 1; i >= 0; i--) {
-        if (get_element_at(game_grid, i, col) == 0) {
-            put_element_at(game_grid, player, i, col);
-            return 1;
-        }
-    }
-}
-
-int check_win(int* game_grid) {
-    // TODO
+int check_win(int* game_grid, int last_row, int last_col) {
+    for()
 }
 
 int main() {
@@ -106,32 +104,40 @@ int main() {
     char* command = (char*)malloc(COMMAND_SIZE);
     int param;
 
-    int command_recognized = 1;
+    int msg = MSG_OK;
+
     system("clear");
+
     while (1) {
+        // print game screen
         print_game_grid(game_grid);
-        if (!command_recognized) {
-            printf("command %s not recognized\n", command);
+        if (msg != MSG_OK) {
+            handle_msg(msg);
+            msg = MSG_OK;
         }
         printf("> ");
 
+        // clear buffers for storing commands
         memset(buffer, 0, COMMAND_SIZE);
         memset(command, 0, COMMAND_SIZE);
+        param = -1;
 
+        // read commands from user's input
         fgets(buffer, COMMAND_SIZE, stdin);
         sscanf(buffer, "%s", command);
         sscanf(buffer + strlen(command), "%d", &param);
 
+        // decode the inserted command and handle msgs
         if (strcmp(command, "insert") == 0) {
-            insert_checker(game_grid, 1, param);
+            msg = insert_checker(game_grid, 1, param);
+        } else if (strcmp(command, "help") == 0) {
+            msg = MSG_SHOW_GUIDE;
         } else if (strcmp(command, "quit") == 0) {
             break;
         } else {
-            command_recognized = 0;
-            system("clear");
-            continue;
+            msg = MSG_COMMAND_NOT_FOUND;
         }
-        command_recognized = 1;
+
         system("clear");
     }
 }
