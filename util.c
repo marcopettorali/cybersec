@@ -17,6 +17,21 @@ void handle_msg(int msg) {
             printf("help\t:\tshows this guide\n");
             printf("quit\t:\tquit the game\n");
             break;
+        case MSG_SHOW_GUIDE_CLIENT_DASHBOARD:
+            printf("GUIDE:\n");
+            printf("server\t:\tconnect to server\n");
+            printf("play\t:\tconnect p2p to a client retrived from the server\n");
+            printf("help\t:\tshows this guide\n");
+            printf("quit\t:\tquit the program\n");
+            break;
+        case MSG_SHOW_GUIDE_CLIENT_SERVER_INTERACTION:
+            printf("GUIDE:\n");
+            printf("chat\t:\tchat with the server\n");
+            printf("list\t:\tretrive the list of active users from the server\n");
+            printf("help\t:\tshows this guide\n");
+            printf("close\t:\tclose the connection with the server\n");
+            break;
+            
     }
 }
 

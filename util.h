@@ -15,6 +15,11 @@
 #define MSG_COLUMN_NOT_VALID -2
 #define MSG_SHOW_GUIDE -3
 
+#define MSG_SHOW_GUIDE_CLIENT_DASHBOARD -10
+#define MSG_SHOW_GUIDE_CLIENT_SERVER_INTERACTION -11
+
+#define BACKLOG_LISTEN_QUEUE 50
+
 void handle_msg(int msg);
 
 void DEBUG(char* msg, const char* function);
