@@ -4,14 +4,20 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <string.h>
+#include <arpa/inet.h>
+#include <stdbool.h>
 
 #include "util.h"
+#include "list.h"
 
 typedef struct {
     int sock;
     struct sockaddr address;
     int addr_len;
 } Connection;
+
+struct node *head_of_list_users = NULL;
 
 void *thread_handler_client(void *ptr) {
     char *buffer;
@@ -22,7 +28,25 @@ void *thread_handler_client(void *ptr) {
     if (!ptr) pthread_exit(0);
     conn = (Connection *)ptr;
 
+
+    /*char ip[INET_ADDRSTRLEN]; 
+        inet_ntop(AF_INET, &((struct sockaddr_in *)&conn->address)->sin_addr.s_addr, ip, INET_ADDRSTRLEN); 
+      
+        // "ntohs(peer_addr.sin_port)" function is  
+        // for finding port number of client
+        printf("Port-> %d\n",((struct sockaddr_in *)&conn->address)->sin_port);
+        printf("connection established with IP : %s and PORT : %d\n",  
+                                            ip, ntohs(((struct sockaddr_in *)&conn->address)->sin_port));
+    */
+
+    //subscribe the user's presence
+    //WILL BE PROTECTED BY MUTEX
+    insertFirst(&head_of_list_users,(long)pthread_self(),"graziano");
+
+    //print list
+    printList(head_of_list_users);
     // LOGIC OF APP
+
     while (1) {
         /* read length of message */
         read(conn->sock, &len, sizeof(int));
@@ -37,10 +61,17 @@ void *thread_handler_client(void *ptr) {
             /* print message */
             printf("%d.%d.%d.%d: %s\n", (int)((addr)&0xff), (int)((addr >> 8) & 0xff), (int)((addr >> 16) & 0xff), (int)((addr >> 24) & 0xff),
                    buffer);
+
             free(buffer);
+        } else{
+            break;
         }
     }
 
+    //update list of active users
+    //PROTECT WITH MUTEX!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    delete_elem(&head_of_list_users,(long)pthread_self());
+    printList(head_of_list_users);
     /* close socket and clean up */
     close(conn->sock);
     free(conn);

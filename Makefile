@@ -17,8 +17,8 @@ client : client.c util.c
 	$(CC) $(CFLAGS) -o client client.c util.c -lpthread
 
 #if server.c and/or util.c have been modified => recompile
-server : server.c util.c
-	$(CC) $(CFLAGS) -o server server.c util.c -lpthread
+server : server.c util.c list.c
+	$(CC) $(CFLAGS) -o server server.c util.c list.c -lpthread
 
 # To start over from scratch, type 'make clean'.  This
 # removes the executable file, as well as old .o object

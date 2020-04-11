@@ -4,6 +4,7 @@
 #define GRID_WIDTH 7
 #define GRID_HEIGHT 6
 #define COMMAND_SIZE 128
+#define NICKNAME_LENGTH 16
 
 #define PLAYER 1
 #define NO_PLAYER 0
