@@ -28,6 +28,7 @@ void handle_msg(int msg) {
             printf("GUIDE:\n");
             printf("chat\t:\tchat with the server\n");
             printf("list\t:\tretrive the list of active users from the server\n");
+            printf("play\t:\tconnect p2p to a client retrived from the server\n");
             printf("help\t:\tshows this guide\n");
             printf("close\t:\tclose the connection with the server\n");
             break;

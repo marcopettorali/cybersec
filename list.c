@@ -2,6 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include "list.h"
 
 
@@ -12,15 +15,29 @@ void printList(struct node *head) {
 	
    //start from the beginning
    while(ptr != NULL) {
-      printf("(%ld,%s,%d) ",ptr->thread_id,ptr->nickname,ptr->gaming);
+      printf("(%ld,%s,%d,Enemy->%s) ",ptr->thread_id,ptr->nickname,ptr->accepted,ptr->adversary_nickname);
       ptr = ptr->next;
    }
 	
    printf(" ]\n");
 }
 
+//print the list in a buffer (to be sent)
+void printListInBuffer(struct node *head, char * buffer) {
+   struct node *ptr = head;
+   sprintf(buffer,"\n[ ");
+	
+   //start from the beginning
+   while(ptr != NULL) {
+      sprintf(buffer + strlen(buffer),"(%ld,%s,%d,Enemy->%s) ",ptr->thread_id,ptr->nickname,ptr->accepted,ptr->adversary_nickname);
+      ptr = ptr->next;
+   }
+	
+   sprintf(buffer + strlen(buffer)," ]\n");
+}
+
 //insert link at the first location
-void insertFirst(struct node **head,long thread_id, char* nickname) {
+struct node* insertFirst(struct node **head,long thread_id, char* nickname, struct sockaddr_in address) {
    //create a link
    struct node *link = (struct node*) malloc(sizeof(struct node));
 	
@@ -28,13 +45,20 @@ void insertFirst(struct node **head,long thread_id, char* nickname) {
    if(strlen(nickname)>NICKNAME_LENGTH)
        nickname[NICKNAME_LENGTH]='\0';
    strcpy(link->nickname,nickname);
-   link->gaming = false;
+   memcpy(&link->address, &address , sizeof(struct sockaddr_in));
+   //Initialize the other params
+   link->accepted = false;
+   strncpy(link->adversary_nickname, "", NICKNAME_LENGTH);
+   link->adversary_nickname[NICKNAME_LENGTH]='\0';
+   pthread_cond_init(&link->waiting_response,NULL);
 	
    //point it to old first node
    link->next = (*head);
 	
    //point first to new first node
    *head = link;
+
+   return link;
 }
 
 //delete first item
@@ -79,6 +103,33 @@ struct node* find(struct node *head,long thread_id) {
 
    //navigate through list
    while(current->thread_id != thread_id) {
+	
+      //if it is last node
+      if(current->next == NULL) {
+         return NULL;
+      } else {
+         //go to next link
+         current = current->next;
+      }
+   }      
+	
+   //if data found, return the current Link
+   return current;
+}
+
+//find a link with given thread_id
+struct node* get_node_by_nickname(struct node *head,char* nickname) {
+
+   //start from the first link
+   struct node* current = head;
+
+   //if list is empty
+   if(head == NULL) {
+      return NULL;
+   }
+
+   //navigate through list
+   while(strcmp(current->nickname,nickname)!=0) {
 	
       //if it is last node
       if(current->next == NULL) {

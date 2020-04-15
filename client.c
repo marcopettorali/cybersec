@@ -15,6 +15,14 @@ void handling_connection_to_server(char* buffer, char* command){
 	int len;
 	int msg = MSG_OK;
 
+	char* buffer_received = (char*)malloc(COMMAND_SIZE);
+    char* command_received = (char*)malloc(COMMAND_SIZE);
+
+	//just to try
+	int response;
+	uint16_t opponent_port;
+	struct sockaddr_in opponent;
+
 	do {
 		memset(buffer, 0, COMMAND_SIZE);
 		memset(command, 0, COMMAND_SIZE);
@@ -83,6 +91,40 @@ void handling_connection_to_server(char* buffer, char* command){
 				break;
 			}
 			
+		} else if (strcmp(command, "list") == 0) {
+
+			//len=1 == TELL SERVER THAT WE WANT THE LIST
+			len = 1;
+			write(sock, &len, sizeof(int));
+			//has to wait for receiving answer
+			/* read message */
+			memset(buffer_received, 0, COMMAND_SIZE);
+        	read(sock, buffer_received, COMMAND_SIZE);
+			//printf("Size of buffer_received %ld",strlen(buffer_received));
+			printf("List received:\n %s",buffer_received);
+		} else if (strcmp(command, "play") == 0) {
+			memset(buffer, 0, COMMAND_SIZE);
+			memset(command, 0, COMMAND_SIZE);
+			printf("Insert the adversary username -> ");
+			fgets(buffer, COMMAND_SIZE, stdin);
+			sscanf(buffer, "%s", command);
+			//len=2 == TELL SERVER THAT WE WANT TO PLAY WITH username
+			len = 2;
+			write(sock, &len, sizeof(int));
+			write(sock,command,strlen(command)+1); //add the last '\0'
+			//read the response
+			read(sock,&response,sizeof(int));
+			if(response==0){
+				printf("The opponent has rejected\n");
+			} else
+			{
+				//get the parts of the opponent address_in struct
+				read(sock,&opponent_port,sizeof(uint16_t));
+				printf("We'll contact the opponent on %d port\n",opponent_port);
+				//START A NEW THREAD TO CONTACT THE OPPONENT.. WE'LL DO A JOIN ON IT SO WE'll resume the communication with the server only when the game is finished
+				//EACH USER HAS A SOCKET BIND TO THE PORT SPECIFIED IN THE HIS NODE
+			}
+			
 
 		} else if (strcmp(command, "help") == 0) {
 			msg = MSG_SHOW_GUIDE_CLIENT_SERVER_INTERACTION;
@@ -135,6 +177,9 @@ int main(int argc, char** argv) {
             msg = MSG_COMMAND_NOT_FOUND;
         }
     }
+
+	free(buffer);
+	free(command);
 
     return 0;
 }
