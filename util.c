@@ -20,7 +20,6 @@ void handle_msg(int msg) {
         case MSG_SHOW_GUIDE_CLIENT_DASHBOARD:
             printf("GUIDE:\n");
             printf("server\t:\tconnect to server\n");
-            printf("play\t:\tconnect p2p to a client retrived from the server\n");
             printf("help\t:\tshows this guide\n");
             printf("quit\t:\tquit the program\n");
             break;

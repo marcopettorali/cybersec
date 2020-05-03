@@ -23,4 +23,5 @@ int length(struct node *head);
 struct node* find(struct node *head,long thread_id);
 struct node* get_node_by_nickname(struct node *head,char* nickname);
 struct node* set(struct node *head,bool accepted,char* adversary_nickname, struct sockaddr_in adversary_address);
+void reset_after_gaming(struct node *user_node);
 struct node* delete_elem(struct node **head, long thread_id);

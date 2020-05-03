@@ -117,6 +117,16 @@ struct node* find(struct node *head,long thread_id) {
    return current;
 }
 
+void reset_after_gaming(struct node* guest_node){
+   if(guest_node == NULL)
+      return;
+   guest_node->accepted=false;
+   strncpy(guest_node->adversary_nickname, "", NICKNAME_LENGTH);
+   guest_node->adversary_nickname[NICKNAME_LENGTH]='\0';
+}
+
+
+
 //find a link with given thread_id
 struct node* get_node_by_nickname(struct node *head,char* nickname) {
 

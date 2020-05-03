@@ -7,6 +7,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
+#include <fcntl.h>
 
 #include "util.h"
 #include "list.h"
@@ -24,6 +25,23 @@ void prepareListUser(char * info){
     printListInBuffer(head_of_list_users,info);
 }
 
+
+/** Returns true on success, or false if there was an error */
+bool SetSocketBlockingEnabled(int fd, bool blocking)
+{
+   if (fd < 0) return false;
+
+#ifdef _WIN32
+   unsigned long mode = blocking ? 0 : 1;
+   return (ioctlsocket(fd, FIONBIO, &mode) == 0) ? true : false;
+#else
+   int flags = fcntl(fd, F_GETFL, 0);
+   if (flags == -1) return false;
+   flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+   return (fcntl(fd, F_SETFL, flags) == 0) ? true : false;
+#endif
+}
+
 bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint16_t * adversary_port){
     pthread_mutex_lock(&mutex_list_users);
     struct node * node_of_adversary = get_node_by_nickname(head_of_list_users,adversary_nickname);
@@ -37,12 +55,12 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
         pthread_mutex_unlock(&mutex_list_users);
         return false;
     }
-    printf("[%s]: We can try to challenge.. waiting for an answer\n",node_of_guest->nickname);
+    printf("[%s]: We can try to challenge\n",node_of_guest->nickname);
     node_of_adversary->accepted=false;
     //we prepare our nick in his node
     strncpy(node_of_adversary->adversary_nickname,node_of_guest->nickname,NICKNAME_LENGTH);
     while (node_of_adversary->accepted==false && (strcmp(node_of_adversary->adversary_nickname,"")!=0)){
-        printf("User -> %s is waiting a response from %s\n",node_of_guest->nickname,adversary_nickname);
+        printf("[%s]: waiting a response from %s\n",node_of_guest->nickname,adversary_nickname);
         pthread_cond_wait(&node_of_adversary->waiting_response,&mutex_list_users);
     }
 
@@ -62,31 +80,50 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
     return false;
 }
 
-bool check_pending_request(struct node * node_of_guest){
+bool check_pending_request(struct node * node_of_guest, int sock){
     int guest_answer;
 
     pthread_mutex_lock(&mutex_list_users); //otherwise can be changed
-    if(strcmp(node_of_guest->adversary_nickname,"")==0){
+    if((strcmp(node_of_guest->adversary_nickname,"")==0) || (node_of_guest->accepted==true)){
         pthread_mutex_unlock(&mutex_list_users);
+        printf("[%s]: Pending request? false\n",node_of_guest->nickname);
         return false;
     }
     pthread_mutex_unlock(&mutex_list_users);
+    printf("[%s]: Pending request? true\n",node_of_guest->nickname);
     printf("[%s]: has found a request by %s\n",node_of_guest->nickname,node_of_guest->adversary_nickname);
     printf("[%s]: I have to ask my guest if it wants to accept\n",node_of_guest->nickname);
-    //ASK (send a special opcode)
-        printf("It should be asked guest --> 1/0? "); ///MAYBE USE ANOTHER SOCKET NOT BLOCKING FOR THE CLIENT SO THAT PERIODICALLY CHECK IF SOMEONE HAS REQUESTED TO PLAY WITH HIM
-        scanf("%d",&guest_answer);
+    //ASK (send a special opcode = 3)
+        //reset sock to blocking
+        if(SetSocketBlockingEnabled(sock,true)==false){
+            printf("[%s]: Error in setting blocking socket\nI've to abort!",node_of_guest->nickname);
+        }
+        //send 3 and later send nickname of opponent //AT THE END, ONCE MEX FORMATS HAVE BEEN DEFINED, JUST SEND 1 MEX
+        //then wait for the answer
+        int opcode = 3;
+        send(sock, &opcode, sizeof(int), 0);
+        send(sock,node_of_guest->adversary_nickname,strlen(node_of_guest->adversary_nickname)+1,0);
+        read(sock, &guest_answer, sizeof(int));
+        //printf("[%s]: It should be asked guest --> 1/0? ",node_of_guest->nickname); ///MAYBE USE ANOTHER SOCKET NOT BLOCKING FOR THE CLIENT SO THAT PERIODICALLY CHECK IF SOMEONE HAS REQUESTED TO PLAY WITH HIM
+        //scanf("%d",&guest_answer);
     //
     pthread_mutex_lock(&mutex_list_users);
     if(guest_answer==true){ //has accepted
         node_of_guest->accepted=true;
         pthread_cond_signal(&node_of_guest->waiting_response);
+        //we should wait until our guest had finished to play
     } else{
         node_of_guest->accepted=false;
         strncpy(node_of_guest->adversary_nickname,"",NICKNAME_LENGTH);
         pthread_cond_signal(&node_of_guest->waiting_response);
     }
     pthread_mutex_unlock(&mutex_list_users);
+
+    //reset to non-blocking
+    if(SetSocketBlockingEnabled(sock,false)==false){
+            printf("[%s]: Error in setting non-blocking socket\nI've to abort!",node_of_guest->nickname);
+    }
+
     return true;
 }
 
@@ -126,7 +163,7 @@ void *thread_handler_client(void *ptr) {
     */
     user_address.sin_addr.s_addr =  ((struct sockaddr_in *)&conn->address)->sin_addr.s_addr;
     user_address.sin_family = AF_INET;
-    user_address.sin_port = htons(PORT_FOR_GAMING);
+    user_address.sin_port = htons(PORT_FOR_GAMING); //GOOD IF USERS ARE ON DIFFERENT MACHINES (as it should.. but not in our case)
     //subscribe the user's presence
     //WILL BE PROTECTED BY MUTEX
     pthread_mutex_lock(&mutex_list_users);
@@ -171,19 +208,39 @@ void *thread_handler_client(void *ptr) {
         }*/
 
         //CHECK IF PENDING REQUEST
-        printf("Pending request? %d\n",check_pending_request(node_of_guest));
+        //printf("[%s]: Pending request? %d\n",guest_nickname,check_pending_request(node_of_guest));
 
+        /*
 		if (msg != MSG_OK) {
             //write something to the client
             sprintf(command,"%d",msg);
             write(conn->sock, &command, strlen(command));
 			msg = MSG_OK;
-		}
+		}*/
 
         /* read message */
-        read(conn->sock, &commandInt, sizeof(int));
+        //Even if "L'attesa attiva del processore è immorale" cit.Corsini
+        //HAS TO BE NON-BLOCKING OTHERWISE THIS THREAD CANNOT SEE A PENDING REQUEST UNTIL THE CLIENT HAS SENT SOMETHING
+        if(SetSocketBlockingEnabled(conn->sock,false)==false){
+            printf("[%s]: Error in setting non-blocking socket\nI've to abort!",guest_nickname);
+        }
+        do
+        {
+            //sleep a bit otherwise too much overhead
+            sleep(2);
+            //CHECK IF PENDING REQUEST
+            check_pending_request(node_of_guest,conn->sock);
+            //CHECK IF THE CLIENT HAS SENT SOMETHING
+        }while(read(conn->sock, &commandInt, sizeof(int))<=0);
+        
+        
 
         printf("[%s]: we've received -> %d\n",guest_nickname ,commandInt);
+
+        //Come back to blocking socket
+        if(SetSocketBlockingEnabled(conn->sock,true)==false){
+            printf("[%s]: Error in setting blocking socket\nI've to abort!",guest_nickname);
+        }
 
 		if (commandInt == 1) {
             printf("[%s]: He's required the list!\n",guest_nickname);
@@ -202,24 +259,59 @@ void *thread_handler_client(void *ptr) {
             printf("[%s]: He's required to challenge -> ",guest_nickname);
             memset(buffer, 0, COMMAND_SIZE);
             read(conn->sock,buffer,COMMAND_SIZE);
+            //In buffer there is the nickname of the opponent he's going to ask to play
             printf("%s\n",buffer);
             result = try_to_challenge(buffer,node_of_guest,&adversary_port);
-            printf("Has he accepted? %d\n",result);
+            printf("[%s]:Has he accepted? %d\n",node_of_guest->nickname,result);
+            //inform the client of the answer
+            write(conn->sock, &result, sizeof(bool));
             if(result==true){
                 //let che client contact the opponent writing him the ip and port
                 write(conn->sock, &adversary_port, sizeof(uint16_t));
+                    //SHOULD SEND ALSO IP (in our case localhost)
                 do{
                     printf("[%s]: Waiting for the end of the game\n",guest_nickname);
                     /* read message */
+                    //THE THREAD THAT HANDLEs THE PLAYER WHO HAS REQUESTED TO PLAY FOR FIRST IS BLOCKED HERE
                     read(conn->sock, &commandInt, sizeof(int));
-                }while(commandInt!=3);
+                }while(commandInt!=7);
                 //in the meanwhile the server is waiting for the end of game OPCODE
+                printf("[%s]: The client has notified the end of the game\n",guest_nickname);
+                //reset the info in list_user (accepted = false; adversary_nickname = "")
+                pthread_mutex_lock(&mutex_list_users);
+                reset_after_gaming(node_of_guest);
+                pthread_mutex_unlock(&mutex_list_users);
+
+            }else{
+                //the opponent has rejected: inform the client about this
+
+                printf("[%s]: The client has been informed about the denial of challenging\n",guest_nickname);
             }
            
 
-		} else if (strcmp(command, "help") == 0) {
-			msg = MSG_SHOW_GUIDE_SERVER_CLIENT_COMMUNICATION;
-		} else if (strcmp(command, "close") == 0) {
+		} else if(commandInt == 6){ //THE CLIENT HAS ALERT THE SERVER THAT HE'S PLAYING P2P
+            do{
+                printf("[%s]: Waiting for the end of the game\n",guest_nickname);
+                //THE THREAD THAT HANDLEs THE PLAYER WHO HAS BEEN CHALLENGED IS BLOCKED HERE
+                read(conn->sock, &commandInt, sizeof(int));
+            }while(commandInt!=7);
+
+            printf("[%s]: The client has notified the end of the game\n",guest_nickname);
+            //reset the info in list_user (accepted = false; adversary_nickname = "")
+            pthread_mutex_lock(&mutex_list_users);
+            reset_after_gaming(node_of_guest);
+            pthread_mutex_unlock(&mutex_list_users);
+
+
+        }else if(commandInt == 8){ //THE CLIENT INFORMs ITS SERVER THREAD ON WHICH PORT HE WILL LISTEN FOR P2P GAMING
+            int client_p2p_port;
+            read(conn->sock, &client_p2p_port, sizeof(int));
+            pthread_mutex_lock(&mutex_list_users);
+            node_of_guest->address.sin_port = htons(client_p2p_port);
+            pthread_mutex_unlock(&mutex_list_users);
+
+        }//else if (strcmp(command, "close") == 0) {
+         else if (commandInt == -1) { //closing
 			break;
 		} else {
 			msg = MSG_COMMAND_NOT_FOUND;
