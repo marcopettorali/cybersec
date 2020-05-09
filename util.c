@@ -31,7 +31,7 @@ void handle_msg(int msg) {
             printf("help\t:\tshows this guide\n");
             printf("close\t:\tclose the connection with the server\n");
             break;
-        }
+    }
 }
 
 void DEBUG(char* msg, const char* function) {
