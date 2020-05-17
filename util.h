@@ -23,9 +23,6 @@
 
 #define BACKLOG_LISTEN_QUEUE 50
 
-#define MSG_PROTOCOL_SHOW_LIST 1
-
-
 void handle_msg(int msg);
 
 void DEBUG(char* msg, const char* function);
