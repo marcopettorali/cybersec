@@ -14,8 +14,8 @@ struct node {
    struct node *next;
 };
 
-void printList(struct node *head);
-void printListInBuffer(struct node *head, char * buffer);
+void printList(struct node *head); //for debug
+int printListInBuffer(struct node *head, char * buffer);
 struct node* insertFirst(struct node **head,long thread_id, char* nickname, struct sockaddr_in address);
 struct node* deleteFirst(struct node **head);
 bool isEmpty(struct node *head);

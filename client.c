@@ -190,11 +190,16 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 						len = 1;
 						write(sock, &len, sizeof(int));
 						//has to wait for receiving answer
+						/* read lenght buffer */
+						int list_lenght;
+						read(sock, &list_lenght, sizeof(int));
+						printf("Received lenght -> %d\n",list_lenght);
+						char * list_buffer = malloc( sizeof(char) * list_lenght );
 						/* read message */
-						memset(buffer_received, 0, COMMAND_SIZE);
-						read(sock, buffer_received, COMMAND_SIZE);
+						read(sock, list_buffer, list_lenght);
 						//printf("Size of buffer_received %ld",strlen(buffer_received));
-						printf("List received:\n %s",buffer_received);
+						printf("**FORMAT LIST**\n(<nickname_online_user>,0(free)/1(in game),<nickname_adversary..if exists>)\nList received:\n%s\n",list_buffer);
+						free(list_buffer);
 					} else if (strcmp(command, "play") == 0) {
 						msg = MSG_OK;
 						memset(buffer, 0, COMMAND_SIZE);
@@ -264,6 +269,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 
 					} else if (strcmp(command, "help") == 0) {
 						msg = MSG_SHOW_GUIDE_CLIENT_SERVER_INTERACTION;
+						handle_msg(msg);
 					} else if (strcmp(command, "close") == 0) {
 						/* close socket */
 						//to tell the server that we're going to quit

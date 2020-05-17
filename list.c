@@ -23,17 +23,19 @@ void printList(struct node *head) {
 }
 
 //print the list in a buffer (to be sent)
-void printListInBuffer(struct node *head, char * buffer) {
+int printListInBuffer(struct node *head, char * buffer) {
    struct node *ptr = head;
-   sprintf(buffer,"\n[ ");
+   sprintf(buffer,"[");
 	
    //start from the beginning
    while(ptr != NULL) {
-      sprintf(buffer + strlen(buffer),"(%ld,%s,%d,Enemy->%s) ",ptr->thread_id,ptr->nickname,ptr->accepted,ptr->adversary_nickname);
+      sprintf(buffer + strlen(buffer),"(%s,%d,%s)",ptr->nickname,ptr->accepted,ptr->adversary_nickname);
       ptr = ptr->next;
    }
 	
-   sprintf(buffer + strlen(buffer)," ]\n");
+   sprintf(buffer + strlen(buffer),"]");
+
+   return strlen(buffer) + 1;
 }
 
 //insert link at the first location

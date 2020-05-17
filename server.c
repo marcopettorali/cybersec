@@ -19,10 +19,20 @@ typedef struct {
 } Connection;
 
 struct node *head_of_list_users = NULL;
+int user_counter = 0; //used to count how many users are connected (to have an idea of how long the buffer for the list should be)
 pthread_mutex_t mutex_list_users;
 
-void prepareListUser(char * info){
-    printListInBuffer(head_of_list_users,info);
+int prepareListUser(char ** buffer){
+    //FORMAT [(<nickname>,0/1,<nickname_adversary..if exists>)(<nickname>,0/1,<nickname_adversary..if exists>)]
+    //2 = []
+    //4  = (),,
+    //NICKNAME_LENGHT * 2
+    //sizeof(bool) 0/1
+    int max_expected_len = 2 + (4 + 2 * NICKNAME_LENGTH + sizeof(bool)) * user_counter;
+    *buffer = malloc( sizeof(char) * ( max_expected_len + 1 ) );
+
+    return printListInBuffer(head_of_list_users,*buffer);
+    //return effective buffer lenght
 }
 
 
@@ -167,6 +177,7 @@ void *thread_handler_client(void *ptr) {
     //subscribe the user's presence
     //WILL BE PROTECTED BY MUTEX
     pthread_mutex_lock(&mutex_list_users);
+    //replaced by certificates
     if(name==0){
         strncpy(guest_nickname,"graziano",NICKNAME_LENGTH);
         node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"graziano",user_address);
@@ -183,7 +194,9 @@ void *thread_handler_client(void *ptr) {
         strncpy(guest_nickname,"oreste",NICKNAME_LENGTH);
         node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"oreste",user_address);
     }
-    name++;    
+    name++;
+
+    user_counter++; 
     pthread_mutex_unlock(&mutex_list_users);
     
     // LOGIC OF APP
@@ -248,12 +261,16 @@ void *thread_handler_client(void *ptr) {
             //to avoid that some user can be cancelled or added in the meanwhile
             memset(command, 0, COMMAND_SIZE);
             pthread_mutex_lock(&mutex_list_users);
-			prepareListUser(command);
+            char * list_buffer; //point to null
+            int lenght;
+			lenght = prepareListUser(&list_buffer);
             pthread_mutex_unlock(&mutex_list_users);
 
             printList(head_of_list_users);
 
-            write(conn->sock, command, strlen(command));
+            write(conn->sock, &lenght, sizeof(int));
+            write(conn->sock, list_buffer, strlen(list_buffer));
+            free(list_buffer);
 
 		} else if (commandInt == 2) {
             printf("[%s]: He's required to challenge -> ",guest_nickname);
@@ -323,6 +340,7 @@ void *thread_handler_client(void *ptr) {
     //PROTECT WITH MUTEX!
     pthread_mutex_lock(&mutex_list_users);
     delete_elem(&head_of_list_users,(long)pthread_self());
+    user_counter--;
     pthread_mutex_unlock(&mutex_list_users);
     
     /* close socket and clean up */
