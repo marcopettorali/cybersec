@@ -197,4 +197,7 @@ int main() {
             msg = MSG_COMMAND_NOT_FOUND;
         }
     }
+    free(game_grid);
+    free(buffer);
+    free(command);
 }
