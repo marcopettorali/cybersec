@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "game_util.h"
 #include "util.h"
 
 //---- GRID UTIL ----//
@@ -81,10 +82,10 @@ void print_game_grid(int* game_grid) {
         for (int j = 0; j < GRID_WIDTH; j++) {
             printf("| ");
             switch (get_element_at(game_grid, i, j)) {
-                case 1:
+                case PLAYER:
                     printf("O");
                     break;
-                case -1:
+                case OPPONENT:
                     printf("X");
                     break;
                 default:
@@ -176,6 +177,7 @@ int main() {
         if (strcmp(command, "insert") == 0) {
             msg = insert_checker(game_grid, PLAYER, column);
             if (msg == MSG_OK) {
+
                 int winner = check_win(game_grid, column);
                 if (winner == PLAYER) {
                     system("clear");
@@ -188,6 +190,7 @@ int main() {
                     printf("The opponent has won the match\n");
                     break;
                 }
+
             }
         } else if (strcmp(command, "help") == 0) {
             msg = MSG_SHOW_GUIDE;
