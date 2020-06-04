@@ -1,8 +1,8 @@
+#include "net.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "util.h"
 
 int add_header(unsigned char* buffer, char opcode, int payload_len, unsigned char* payload) {
     // initializing the index in the buffer
@@ -19,7 +19,7 @@ int add_header(unsigned char* buffer, char opcode, int payload_len, unsigned cha
     byte_index += PAYLOAD_LEN_SIZE;
 
     // adding the payload
-    strncpy(&buffer[byte_index], payload, payload_len);
+    memcpy(&buffer[byte_index], payload, payload_len);
     byte_index += payload_len;
 
     return byte_index;
@@ -40,7 +40,7 @@ int extract_header(unsigned char* buffer, char* opcode, int* payload_len, unsign
     byte_index += PAYLOAD_LEN_SIZE;
 
     // adding the payload
-    strncpy(payload, &buffer[byte_index], *payload_len);
+    memcpy(payload, &buffer[byte_index], *payload_len);
 
     byte_index += *payload_len;
 

@@ -5,8 +5,6 @@
 
 #include "util.h"
 
-#define GCM_TAG_SIZE 16
-
 int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len,
                 unsigned char *ciphertext, unsigned char *tag) {
     // create context
@@ -111,21 +109,65 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     }
 }
 
+int prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char *ciphertext, unsigned char* shared_key) {
+    unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
+    unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
+    unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
+
+    RAND_poll();
+    RAND_bytes(&iv[0], GCM_IV_SIZE);
+    RAND_bytes(&aad[0], GCM_AAD_SIZE);
+
+    // initialize index in the ciphertext
+    int ct_index = 0;
+
+    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE],
+                tag);
+
+    memcpy(&ciphertext[ct_index], iv, GCM_IV_SIZE);
+    ct_index += GCM_IV_SIZE;
+
+    memcpy(&ciphertext[ct_index], aad, GCM_AAD_SIZE);
+    ct_index += GCM_AAD_SIZE;
+
+    memcpy(&ciphertext[ct_index], tag, GCM_TAG_SIZE);
+    ct_index += GCM_TAG_SIZE;
+}
+
+int extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char *plaintext, unsigned char* shared_key) {
+    unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
+    unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
+    unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
+
+    // initialize index in the ciphertext
+    int ct_index = 0;
+
+    memcpy(&iv[0], &ciphertext[ct_index], GCM_IV_SIZE);
+    ct_index += GCM_IV_SIZE;
+
+    memcpy(&aad[0], &ciphertext[ct_index], GCM_AAD_SIZE);
+    ct_index += GCM_AAD_SIZE;
+
+    memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
+    ct_index += GCM_TAG_SIZE;
+
+    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
+                &iv[0], GCM_IV_SIZE, &plaintext[0]);
+}
+
 int main() {
     int tag_len;
 
-    unsigned char *pt = "shiss";
-    unsigned char *key = "abcdefghilmnopqrs";
-    unsigned char *iv = "abcdefghilm";
-    unsigned char *aad = "pqrstuvwxyz";
-    unsigned char *ct = (unsigned char *)malloc(strlen(pt));
-    unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
+    unsigned char *pt = "BELLARAGA!!!!";
+    unsigned char* shared_key = (unsigned char*)malloc(18);
+    memcpy(&shared_key[0], "abcdefghilmnopqrs", 18);
+    
+    unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
+    prepare_gcm_ciphertext(&pt[0], strlen(pt), &ciphertext[0], &shared_key[0]);
 
-    gcm_encrypt(pt, strlen(pt), aad, strlen(iv), key, iv, strlen(iv), ct, tag);
-
-    unsigned char *buf = (unsigned char *)malloc(strlen(pt));
-    gcm_decrypt(ct, strlen(pt), aad, strlen(aad), tag, key, iv, strlen(iv), buf);
-
-    printf("plaintext = %s.\n", buf);
+    unsigned char *received_pt = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
+    extract_gcm_ciphertext(&ciphertext[0], GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt), &received_pt[0], &shared_key[0]);
+    
+    printf("plaintext = %s.\n", received_pt);
     return 0;
 }

@@ -1,4 +1,5 @@
 #include "util.h"
+#include "game_util.h"
 
 void handle_msg(int msg) {
     switch (msg) {

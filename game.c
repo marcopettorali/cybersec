@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "game_net.h"
 #include "game_util.h"
 #include "util.h"
 
@@ -153,6 +154,8 @@ int main() {
 
     int msg = MSG_OK;
 
+    int move_counter = 0;
+
     while (1) {
         // print game screen
         system("clear");
@@ -177,20 +180,42 @@ int main() {
         if (strcmp(command, "insert") == 0) {
             msg = insert_checker(game_grid, PLAYER, column);
             if (msg == MSG_OK) {
-
+                send_move(&player_nickname[0], &opponent_nickname[0], move_counter, column);
                 int winner = check_win(game_grid, column);
                 if (winner == PLAYER) {
                     system("clear");
                     print_game_grid(game_grid);
                     printf("YOU WIN!\n");
                     break;
-                } else if (winner == OPPONENT) {
-                    system("clear");
-                    print_game_grid(game_grid);
-                    printf("The opponent has won the match\n");
-                    break;
-                }
+                } else {
+                    char player_1[NICKNAME_LENGTH];
+                    char player_2[NICKNAME_LENGTH];
+                    char count;
+                    char column;
+                    wait_move(&player_1[0], &player_2[0], &count, &column);
+                    if (count != move_counter + 1) {
+                        printf("error: move_counter = %d, count = %d\n", move_counter, count);
+                        EXCEPTION("COUNT DOESN'T MATCH", __func__);
+                    }
+                    move_counter = count + 1;
+                    if (strcmp(&player_1[0], &opponent_nickname) != 0 || strcmp(&player_2[0], &player_nickname) != 0) {
+                        printf("error: player1 = %s, player 2 = %s\n", player_1, player_2);
+                        EXCEPTION("PLAYERS DOESN'T MATCH", __func__);
+                    }
 
+                    int ret = insert_checker(game_grid, OPPONENT, column);
+                    if (ret != MSG_OK) {
+                        printf("error: msg = %d\n", ret);
+                        EXCEPTION("OPPONENT CHEATED", __func__);
+                    }
+                    int win = check_win(game_grid, column);
+                    if (winner == OPPONENT) {
+                        system("clear");
+                        print_game_grid(game_grid);
+                        printf("The opponent won the match\n");
+                        break;
+                    }
+                }
             }
         } else if (strcmp(command, "help") == 0) {
             msg = MSG_SHOW_GUIDE;
