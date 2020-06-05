@@ -13,12 +13,12 @@ CFLAGS  = -g -Wall
 # are the most commonly used names by convention
 all : client server
 
-client : client.c util.c
-	$(CC) $(CFLAGS) -o client client.c util.c -lpthread
+client : client.c util.c message.c
+	$(CC) $(CFLAGS) -o client client.c util.c message.c -lpthread -lcrypto
 
 #if server.c and/or util.c have been modified => recompile
-server : server.c util.c list.c
-	$(CC) $(CFLAGS) -o server server.c util.c list.c -lpthread
+server : server.c util.c list.c message.c
+	$(CC) $(CFLAGS) -o server server.c util.c list.c message.c -lpthread -lcrypto
 
 # To start over from scratch, type 'make clean'.  This
 # removes the executable file, as well as old .o object

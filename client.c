@@ -10,7 +10,11 @@
 #include <stdbool.h>
 #include <pthread.h>
 
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+
 #include "util.h"
+#include "message.h"
 
 typedef struct {
     int sock;
@@ -41,6 +45,29 @@ void *thread_handler_gaming(void *ptr) {
 	pthread_exit(0);
 }
 
+bool client_authentication(char* username_client,EVP_PKEY** p_prvkey){
+	char buffer_nickname[NICKNAME_LENGTH];
+	printf("**Authentication**\nUsername -> ");
+	fgets(buffer_nickname, NICKNAME_LENGTH, stdin);
+	sscanf(buffer_nickname, "%s", username_client);
+	username_client[NICKNAME_LENGTH-1]='\0';
+															   		//	21			 //11111111 = 8
+	char prvkey_file_name[NICKNAME_LENGTH + 29]; //format ./client_certificate/nickname_key.pem
+	strcpy(prvkey_file_name,"./client_certificate/");
+	strncat(prvkey_file_name,username_client,NICKNAME_LENGTH);
+	strcat(prvkey_file_name,"_key.pem");
+	//printf("File to open %s\n",prvkey_file_name);
+
+	// load my private key:
+	FILE* prvkey_file = fopen(prvkey_file_name, "r");
+	if(!prvkey_file){ printf("Error: Unknown Username\n"); return false;}
+	*(p_prvkey) = PEM_read_PrivateKey(prvkey_file, NULL, NULL, NULL);
+	fclose(prvkey_file);
+	if(!*(p_prvkey)){ printf("Error: Wrong password\n"); return false;}
+
+	return true;
+}
+
 
 void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	int port;
@@ -61,6 +88,14 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 
 	Connection *connection_to_play;
     pthread_t thread_to_play;
+
+	//Login Username,password
+	// read my private key file from keyboard:
+	// if the file is protected, a prompt shows up automatically
+	char username_client[NICKNAME_LENGTH];
+	EVP_PKEY* prvkey = NULL;
+	if(client_authentication(username_client,&prvkey)==false)
+		exit(1);
 
 	do {
 		memset(buffer, 0, COMMAND_SIZE);
@@ -130,7 +165,17 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 
 
 	/* chatting with the server */
-	printf("Connection to the server established\n");
+	printf("Socket connected to server\n");
+	//start authentication and key establishment
+	printf("**Establishing secure connection**\n");
+	
+	Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client);
+
+	//TEST SE MEX FUNZIONA
+
+
+
+
 	//Tell him on which port I will listen for p2p port (since we cannot listen on the same port of other local players)
 	int command_to_tell_port = 8;
 	send(sock, &command_to_tell_port, sizeof(int), 0);
