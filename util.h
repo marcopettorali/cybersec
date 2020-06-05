@@ -15,3 +15,11 @@
 
 void DEBUG(char* msg, const char* function);
 void EXCEPTION(char* msg, const char* function);
+
+
+#define COMMAND_SIZE 128
+#define MSG_OK 1
+#define MSG_COMMAND_NOT_FOUND 0
+#define MSG_COLUMN_FULL -1
+#define MSG_COLUMN_NOT_VALID -2
+#define MSG_SHOW_GUIDE -3

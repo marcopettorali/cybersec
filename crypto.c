@@ -154,7 +154,7 @@ int extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsign
     gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
                 &iv[0], GCM_IV_SIZE, &plaintext[0]);
 }
-
+/*
 int main() {
     int tag_len;
 
@@ -170,4 +170,4 @@ int main() {
     
     printf("plaintext = %s.\n", received_pt);
     return 0;
-}
+}*/

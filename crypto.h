@@ -7,7 +7,7 @@
 #define GCM_TAG_SIZE 16
 
 // I'm not sure to leave it here
-extern unsigned char* shared_key;
+unsigned char* shared_key;
 
 int gcm_encrypt(unsigned char* plaintext, int plaintext_len, unsigned char* aad, int aad_len, unsigned char* key, unsigned char* iv, int iv_len,
                 unsigned char* ciphertext, unsigned char* tag);

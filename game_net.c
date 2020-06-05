@@ -72,6 +72,10 @@ void print_move_message(unsigned char* payload) {
     byte_index += sizeof(char);
 
     printf("\n");
+
+    //Need to know if waste of char after effective nickname
+    BIO_dump_fp (stdout, (const char *)payload, byte_index);
+    
 }
 
 int send_move(char* player_1, char* player_2, char count, char column) {

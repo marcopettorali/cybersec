@@ -50,7 +50,7 @@ int extract_header(unsigned char* buffer, char* opcode, int* payload_len, unsign
 void print_header(unsigned char* buffer) {
     int byte_index = 0;
 
-    char* opcode_ptr = &buffer[byte_index];
+    char* opcode_ptr = (char*)&buffer[byte_index];
     printf("[%d", *opcode_ptr);
     byte_index += OPCODE_SIZE;
 

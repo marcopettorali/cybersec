@@ -11,6 +11,7 @@
 
 #include "util.h"
 #include "list.h"
+#include "message.h"
 
 typedef struct {
     int sock;
@@ -150,13 +151,17 @@ void *thread_handler_client(void *ptr) {
     char* command = (char*)malloc(COMMAND_SIZE);
     
     //Just to test
-    int commandInt;
+    int opcode;
     int len;
     bool result;
     char guest_nickname[NICKNAME_LENGTH]; //WILL BE OBTAINED BY FILE IN WHICH THERA ARE STORED PUBKEYS
     struct node * node_of_guest;
     uint16_t adversary_port;
 
+    //handling messages
+    Message *mex_received;
+    //handling authentication
+    AuthenticationInstance *authenticationInstance;
 
     if (!ptr) pthread_exit(0);
     conn = (Connection *)ptr;
@@ -200,6 +205,7 @@ void *thread_handler_client(void *ptr) {
     pthread_mutex_unlock(&mutex_list_users);
     
     // LOGIC OF APP
+    
     while (1) {
         //memset(buffer, 0, COMMAND_SIZE);
 		//memset(command, 0, COMMAND_SIZE);
@@ -237,25 +243,53 @@ void *thread_handler_client(void *ptr) {
         if(SetSocketBlockingEnabled(conn->sock,false)==false){
             printf("[%s]: Error in setting non-blocking socket\nI've to abort!",guest_nickname);
         }
-        do
-        {
+        mex_received = (Message *)malloc (sizeof (Message));
+        do{
             //sleep a bit otherwise too much overhead
             sleep(2);
             //CHECK IF PENDING REQUEST
             check_pending_request(node_of_guest,conn->sock);
             //CHECK IF THE CLIENT HAS SENT SOMETHING
-        }while(read(conn->sock, &commandInt, sizeof(int))<=0);
+        }while(read(conn->sock, &mex_received->opcode, OPCODE_SIZE)<=0);
         
-        
+        //Retrieve remaining part of message (payload_len)
+        read(conn->sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
+        mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
+        //Retrieve remaining part of message (payload)
+        int read_byte = read(conn->sock, mex_received->payload, mex_received->payload_len);
+        //printf("Byte read %d\n", read_byte);
 
-        printf("[%s]: we've received -> %d\n",guest_nickname ,commandInt);
+        switch (mex_received->opcode)
+        {
+            case M1_CLIENT_SERVER_AUTH:
+            free(authenticationInstance);
+            authenticationInstance = (AuthenticationInstance*)malloc(sizeof(AuthenticationInstance));
+            if( handler_M1_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                goto closing_sock;
+            }
+            
+            break;
+            
+            default: 
+            printf("Unknown opcode\n");
+            break;
+        }
+
+        //TO DELETE
+        opcode = mex_received->opcode;
+
+        printf("[%s]: we've received -> %d\n",guest_nickname ,mex_received->opcode);
 
         //Come back to blocking socket
         if(SetSocketBlockingEnabled(conn->sock,true)==false){
             printf("[%s]: Error in setting blocking socket\nI've to abort!",guest_nickname);
         }
+        if(mex_received->opcode == M1_CLIENT_SERVER_AUTH){
+            printf("[Unknown client handler]: Someone has sent a starting authentication mex!\n");
+            
 
-		if (commandInt == 1) {
+        }
+		if (opcode == 1) {
             printf("[%s]: He's required the list!\n",guest_nickname);
 
             //to avoid that some user can be cancelled or added in the meanwhile
@@ -272,7 +306,7 @@ void *thread_handler_client(void *ptr) {
             write(conn->sock, list_buffer, strlen(list_buffer));
             free(list_buffer);
 
-		} else if (commandInt == 2) {
+		} else if (opcode == 2) {
             printf("[%s]: He's required to challenge -> ",guest_nickname);
             memset(buffer, 0, COMMAND_SIZE);
             read(conn->sock,buffer,COMMAND_SIZE);
@@ -290,8 +324,8 @@ void *thread_handler_client(void *ptr) {
                     printf("[%s]: Waiting for the end of the game\n",guest_nickname);
                     /* read message */
                     //THE THREAD THAT HANDLEs THE PLAYER WHO HAS REQUESTED TO PLAY FOR FIRST IS BLOCKED HERE
-                    read(conn->sock, &commandInt, sizeof(int));
-                }while(commandInt!=7);
+                    read(conn->sock, &opcode, sizeof(int));
+                }while(opcode!=7);
                 //in the meanwhile the server is waiting for the end of game OPCODE
                 printf("[%s]: The client has notified the end of the game\n",guest_nickname);
                 //reset the info in list_user (accepted = false; adversary_nickname = "")
@@ -306,12 +340,12 @@ void *thread_handler_client(void *ptr) {
             }
            
 
-		} else if(commandInt == 6){ //THE CLIENT HAS ALERT THE SERVER THAT HE'S PLAYING P2P
+		} else if(opcode == 6){ //THE CLIENT HAS ALERT THE SERVER THAT HE'S PLAYING P2P
             do{
                 printf("[%s]: Waiting for the end of the game\n",guest_nickname);
                 //THE THREAD THAT HANDLEs THE PLAYER WHO HAS BEEN CHALLENGED IS BLOCKED HERE
-                read(conn->sock, &commandInt, sizeof(int));
-            }while(commandInt!=7);
+                read(conn->sock, &opcode, sizeof(int));
+            }while(opcode!=7);
 
             printf("[%s]: The client has notified the end of the game\n",guest_nickname);
             //reset the info in list_user (accepted = false; adversary_nickname = "")
@@ -320,7 +354,7 @@ void *thread_handler_client(void *ptr) {
             pthread_mutex_unlock(&mutex_list_users);
 
 
-        }else if(commandInt == 8){ //THE CLIENT INFORMs ITS SERVER THREAD ON WHICH PORT HE WILL LISTEN FOR P2P GAMING
+        }else if(opcode == 8){ //THE CLIENT INFORMs ITS SERVER THREAD ON WHICH PORT HE WILL LISTEN FOR P2P GAMING
             int client_p2p_port;
             read(conn->sock, &client_p2p_port, sizeof(int));
             pthread_mutex_lock(&mutex_list_users);
@@ -328,7 +362,7 @@ void *thread_handler_client(void *ptr) {
             pthread_mutex_unlock(&mutex_list_users);
 
         }//else if (strcmp(command, "close") == 0) {
-         else if (commandInt == -1) { //closing
+         else if (opcode == -1) { //closing
 			break;
 		} else {
 			msg = MSG_COMMAND_NOT_FOUND;
@@ -336,6 +370,7 @@ void *thread_handler_client(void *ptr) {
 	
     }
 
+closing_sock:
     //update list of active users
     //PROTECT WITH MUTEX!
     pthread_mutex_lock(&mutex_list_users);
