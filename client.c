@@ -170,15 +170,53 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 
 	/* chatting with the server */
 	printf("Socket connected to server\n");
-	//start authentication and key establishment
+	//**START AUTHENTICATION AND KEY ESTABLISHMENT**
+
+
+	//handling messages
+    Message *mex_received = (Message *)malloc (sizeof (Message));
+    //handling authentication
+    AuthenticationInstance *authenticationInstance = (AuthenticationInstance*)malloc(sizeof(AuthenticationInstance));
+
 	printf("**Establishing secure connection**\n");
 	
-	Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client);
+	Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client,authenticationInstance);
 	unsigned char* buffer_to_send = (unsigned char *)malloc(mex->payload_len);
 	int byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
 	//BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
 	send(sock, buffer_to_send, byte_to_send, 0);
+	free_MESSAGE(&mex);
 
+	//Waiting for M2_CLIENT_SERVER_AUTH
+	read(sock, &mex_received->opcode, OPCODE_SIZE);
+	if(mex_received->opcode != M2_CLIENT_SERVER_AUTH){
+		printf("Expected M2_CLIENT_SERVER_AUTH but arrived another mex\nAbort\n");
+		close(sock);
+		close(sock_to_play);
+		return;
+	}
+	//Retrieve remaining part of message (payload_len)
+	read(sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
+	mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
+	//Retrieve remaining part of message (payload)
+	int read_byte = read(sock, mex_received->payload, mex_received->payload_len);
+	//printf("Byte read %d\n", read_byte);
+
+	if( handler_M2_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance,prvkey) != 1){
+		free(authenticationInstance);
+		printf("Error in handler_M2_CLIENT_SERVER_AUTH\nAbort");
+		close(sock);
+		close(sock_to_play);
+		return;
+	}
+	
+	printf("M2 handled correctly..send m3\n");
+	sleep(10);
+
+	//has to receive server response
+	
+
+	//**END AUTHENTICATION AND KEY ESTABLISHMENT
 
 
 

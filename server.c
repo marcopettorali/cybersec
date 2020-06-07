@@ -13,6 +13,8 @@
 #include "list.h"
 #include "message.h"
 
+#include"net.h"
+
 typedef struct {
     int sock;
     struct sockaddr address;
@@ -262,14 +264,42 @@ void *thread_handler_client(void *ptr) {
         switch (mex_received->opcode)
         {
             case M1_CLIENT_SERVER_AUTH:
-            free(authenticationInstance);
-            authenticationInstance = (AuthenticationInstance*)malloc(sizeof(AuthenticationInstance));
-            if( handler_M1_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
-                goto closing_sock;
-            }
-            
+                //received M1
+                //check if expected or not TODO!!!!!!
+                //if authenticationInstance == NULL means that authentication protocol not yet started so this mex is obviously accepted
+                if(is_this_auth_protocol_message_expected(authenticationInstance,M1_CLIENT_SERVER_AUTH)){
+                    printf("Unexpected M1_CLIENT_SERVER_AUTH\nAbort\n");
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                authenticationInstance = (AuthenticationInstance*)malloc(sizeof(AuthenticationInstance));
+                if( handler_M1_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+
+
+                //send M2
+                Message *mex = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
+                if(mex==NULL){
+                    printf("Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n");
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+
+                //printf("Opcode -> %d\nPayload_len -> %d\n",mex->opcode,mex->payload_len);
+                unsigned char* buffer_to_send = (unsigned char *)malloc(mex->payload_len);
+                int byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
+                //BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
+                send(conn->sock, buffer_to_send, byte_to_send, 0);
+
             break;
             
+            case M3_CLIENT_SERVER_AUTH:
+                sleep(10);
+                printf("Received M3..");
+            break;
+
             default: 
             printf("Unknown opcode\n");
             break;
@@ -284,11 +314,7 @@ void *thread_handler_client(void *ptr) {
         if(SetSocketBlockingEnabled(conn->sock,true)==false){
             printf("[%s]: Error in setting blocking socket\nI've to abort!",guest_nickname);
         }
-        if(mex_received->opcode == M1_CLIENT_SERVER_AUTH){
-            printf("[Unknown client handler]: Someone has sent a starting authentication mex!\n");
-            
 
-        }
 		if (opcode == 1) {
             printf("[%s]: He's required the list!\n",guest_nickname);
 
