@@ -109,7 +109,11 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     }
 }
 
-int prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char *ciphertext, unsigned char* shared_key) {
+unsigned char * prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char* shared_key, int* ciphertext_len) {
+    //buffer to return
+    unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
+    *ciphertext_len = GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
+
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
     unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
     unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
@@ -132,9 +136,16 @@ int prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned
 
     memcpy(&ciphertext[ct_index], tag, GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
+
+    //MARCO: changed return
+    return ciphertext;
 }
 
-int extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char *plaintext, unsigned char* shared_key) {
+unsigned char* extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char* shared_key, int* plaintext_len) {
+    //Buffer to return
+    unsigned char* plaintext = (unsigned char *)malloc(ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE));
+    *plaintext_len = ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE);
+
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
     unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
     unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
@@ -153,7 +164,21 @@ int extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsign
 
     gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
                 &iv[0], GCM_IV_SIZE, &plaintext[0]);
+
+    //MARCO: changed return
+    return plaintext;
 }
+/* TO BE MOVED HERE
+void generate_symmetric_key(unsigned char **key,unsigned long key_len){
+	RAND_poll();
+	int rc = RAND_bytes(*key, key_len);
+	//unsigned long err = ERR_get_error();
+
+	if(rc != 1) {
+		printf("Error in generating key\n");
+		exit(1);
+	}
+}*/
 /*
 int main() {
     int tag_len;

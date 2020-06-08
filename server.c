@@ -14,12 +14,15 @@
 #include "message.h"
 
 #include"net.h"
+#include"crypto.h"
 
 typedef struct {
     int sock;
     struct sockaddr address;
     int addr_len;
 } Connection;
+
+EVP_PKEY* prvkey = NULL;
 
 struct node *head_of_list_users = NULL;
 int user_counter = 0; //used to count how many users are connected (to have an idea of how long the buffer for the list should be)
@@ -162,8 +165,9 @@ void *thread_handler_client(void *ptr) {
 
     //handling messages
     Message *mex_received;
+    Message *mex_to_send;
     //handling authentication
-    AuthenticationInstance *authenticationInstance;
+    AuthenticationInstance *authenticationInstance = NULL;
 
     if (!ptr) pthread_exit(0);
     conn = (Connection *)ptr;
@@ -181,30 +185,6 @@ void *thread_handler_client(void *ptr) {
     user_address.sin_addr.s_addr =  ((struct sockaddr_in *)&conn->address)->sin_addr.s_addr;
     user_address.sin_family = AF_INET;
     user_address.sin_port = htons(PORT_FOR_GAMING); //GOOD IF USERS ARE ON DIFFERENT MACHINES (as it should.. but not in our case)
-    //subscribe the user's presence
-    //WILL BE PROTECTED BY MUTEX
-    pthread_mutex_lock(&mutex_list_users);
-    //replaced by certificates
-    if(name==0){
-        strncpy(guest_nickname,"graziano",NICKNAME_LENGTH);
-        node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"graziano",user_address);
-    }
-    if(name==1){
-        strncpy(guest_nickname,"silvano",NICKNAME_LENGTH);
-        node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"silvano",user_address);
-    }
-    if(name==2){
-        strncpy(guest_nickname,"loriano",NICKNAME_LENGTH);
-        node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"loriano",user_address);
-    }
-    if(name==3){
-        strncpy(guest_nickname,"oreste",NICKNAME_LENGTH);
-        node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),"oreste",user_address);
-    }
-    name++;
-
-    user_counter++; 
-    pthread_mutex_unlock(&mutex_list_users);
     
     // LOGIC OF APP
     
@@ -249,8 +229,9 @@ void *thread_handler_client(void *ptr) {
         do{
             //sleep a bit otherwise too much overhead
             sleep(2);
-            //CHECK IF PENDING REQUEST
-            check_pending_request(node_of_guest,conn->sock);
+            //CHECK IF PENDING REQUEST if already authenticated
+            if(authenticationInstance != NULL && authenticationInstance->expected_opcode == SUCCESSFUL_CLIENT_SERVER_AUTH)
+                check_pending_request(node_of_guest,conn->sock);
             //CHECK IF THE CLIENT HAS SENT SOMETHING
         }while(read(conn->sock, &mex_received->opcode, OPCODE_SIZE)<=0);
         
@@ -267,7 +248,7 @@ void *thread_handler_client(void *ptr) {
                 //received M1
                 //check if expected or not TODO!!!!!!
                 //if authenticationInstance == NULL means that authentication protocol not yet started so this mex is obviously accepted
-                if(is_this_auth_protocol_message_expected(authenticationInstance,M1_CLIENT_SERVER_AUTH)){
+                if(authenticationInstance != NULL){
                     printf("Unexpected M1_CLIENT_SERVER_AUTH\nAbort\n");
                     free(authenticationInstance);
                     goto closing_sock;
@@ -278,26 +259,66 @@ void *thread_handler_client(void *ptr) {
                     goto closing_sock;
                 }
 
-
                 //send M2
-                Message *mex = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
-                if(mex==NULL){
+                mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
+                if(mex_to_send==NULL){
                     printf("Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n");
                     free(authenticationInstance);
                     goto closing_sock;
                 }
 
                 //printf("Opcode -> %d\nPayload_len -> %d\n",mex->opcode,mex->payload_len);
-                unsigned char* buffer_to_send = (unsigned char *)malloc(mex->payload_len);
-                int byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
+                unsigned char* buffer_to_send = (unsigned char *)malloc(mex_to_send->payload_len);
+                int byte_to_send = add_header(buffer_to_send,mex_to_send->opcode,mex_to_send->payload_len,mex_to_send->payload);
                 //BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
                 send(conn->sock, buffer_to_send, byte_to_send, 0);
+
+                free_MESSAGE(&mex_to_send);
 
             break;
             
             case M3_CLIENT_SERVER_AUTH:
-                sleep(10);
-                printf("Received M3..");
+                //received M3
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != M3_CLIENT_SERVER_AUTH)){
+                    printf("Unexpected M3_CLIENT_SERVER_AUTH\nAbort\n");
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                if( handler_M3_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance,prvkey) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+
+                printf("M3 handled correctly\n");
+                //send M4
+                mex_to_send = create_M4_CLIENT_SERVER_AUTH(authenticationInstance);
+                if(mex_to_send==NULL){
+                    printf("Unable to create M4_CLIENT_SERVER_AUTH\nAbort\n");
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("M4 created\n");
+                //printf("Opcode -> %d\nPayload_len -> %d\n",mex->opcode,mex->payload_len);
+
+                //TODO FREE BUFFER_to send_m4!!! and use buffer_to_send
+
+                unsigned char *buffer_to_send_M4 = (unsigned char *)malloc(mex_to_send->payload_len);
+                byte_to_send = add_header(buffer_to_send_M4,mex_to_send->opcode,mex_to_send->payload_len,mex_to_send->payload);
+                //BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
+                send(conn->sock, buffer_to_send_M4, byte_to_send, 0);
+                printf("M4 sent\n");
+
+                //subscribe the user's presence since authenticated
+                //PROTECTED BY MUTEX
+                pthread_mutex_lock(&mutex_list_users);
+                strncpy(guest_nickname,authenticationInstance->nickname_client,NICKNAME_LENGTH);
+                node_of_guest = insertFirst(&head_of_list_users,(long)pthread_self(),authenticationInstance->nickname_client,user_address);
+                user_counter++; 
+                pthread_mutex_unlock(&mutex_list_users);
+
+                free_MESSAGE(&mex_to_send);
             break;
 
             default: 
@@ -412,13 +433,6 @@ closing_sock:
     pthread_exit(0);
 }
 
-
-
-
-
-
-
-
 int main(int argc, char **argv) {
     int sock_main_thread = -1;
     struct sockaddr_in address_server;
@@ -461,6 +475,13 @@ int main(int argc, char **argv) {
     }
     // listen return 0 if ok
     printf("%s: ready and listening\n", argv[0]);
+
+    //**Authentication of server** (retrieve privkey server)
+    if(server_authentication(&prvkey)==false){
+        exit(1);
+    }else{
+        printf("**Successfull authentication**\n");
+    }
 
 
     //Initialize Mutex for list users

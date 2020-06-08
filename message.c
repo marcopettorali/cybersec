@@ -14,6 +14,7 @@
 #include "util.h"
 #include "message.h"
 #include "pub_key_crypto.h"
+#include "crypto.h"
 
 void generate_nonce(unsigned char **nonce,unsigned long nonce_len){
 	RAND_poll();
@@ -31,21 +32,13 @@ void free_MESSAGE(Message** mex){
     *mex = NULL;
 }
 
-bool is_this_auth_protocol_message_expected(AuthenticationInstance * authInstance, char opcode){
-    if(authInstance == false)
-        return true; //since auth proto not yet started
-    if(authInstance->expected_opcode != opcode)
-        return false;
-    return true;
-}
-
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance * authInstance){
     unsigned char *nonce = (unsigned char *)malloc(NONCE_32);
     int byte_index = 0;
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
     
-    mex->opcode = M1_CLIENT_SERVER_AUTH; 
+    mex->opcode = (char)M1_CLIENT_SERVER_AUTH; 
 
     mex->payload = (unsigned char *)malloc(NICKNAME_LENGTH + sizeof(NICKNAME_SERVER) + NONCE_32);
     
@@ -110,7 +103,7 @@ Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance){
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
  
-    mex->opcode = M2_CLIENT_SERVER_AUTH; 
+    mex->opcode = (char)M2_CLIENT_SERVER_AUTH; 
 
     //get server's certificate Cs
     FILE* server_cert_file = fopen("./server_certificates/server_cert.pem", "r");
@@ -184,7 +177,7 @@ Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance){
     free(ciphertext_and_info_buf);
 
     //update values in authInstance
-    authInstance->expected_opcode = M3_CLIENT_SERVER_AUTH;
+    authInstance->expected_opcode = (char)M3_CLIENT_SERVER_AUTH;
 
     return mex;
 }
@@ -257,6 +250,237 @@ bool get_and_verify_info_M2_CLIENT_SERVER_AUTH(unsigned char * plaintext,Authent
     if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce in M2\n");return false;}
 
     memcpy(authInstance->challenge_to_client, challenge_to_client_rec,CHALLENGE_32);
+
+    return true;
+}
+
+
+Message* create_M3_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas) 
+
+  
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = (char)M3_CLIENT_SERVER_AUTH; 
+
+
+    //generate challenge for server CHs
+    unsigned char *challenge = (unsigned char *)malloc(CHALLENGE_32);
+    generate_nonce(&challenge,CHALLENGE_32);
+    memcpy(authInstance->challenge_to_server, challenge, CHALLENGE_32);
+    free(challenge);
+
+    //generate symmetric key Kas
+    unsigned char *symmetric_key = (unsigned char *)malloc(GCM_KEY_SIZE);
+    generate_symmetric_key(&symmetric_key,GCM_KEY_SIZE); //on 128 bit
+    memcpy(authInstance->symmetric_key, symmetric_key, GCM_KEY_SIZE);
+    memset(symmetric_key, 0, GCM_KEY_SIZE);
+    free(symmetric_key);
+
+
+    //Start creating plaintext |ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(NICKNAME_LENGTH + sizeof(NICKNAME_SERVER) + 2 * CHALLENGE_32 + GCM_KEY_SIZE);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->nickname_client, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),NICKNAME_SERVER, sizeof(NICKNAME_SERVER));
+    pt_byte_index += sizeof(NICKNAME_SERVER);
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->challenge_to_client, CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->challenge_to_server, CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->symmetric_key, GCM_KEY_SIZE);
+    pt_byte_index += GCM_KEY_SIZE;
+
+    //get ciphertext EpubKeyServer
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = get_asymmetric_encrypted_digital_envelope(plaintext_buffer, pt_byte_index, authInstance->server_pub_key,&ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext EpubKeyServer\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+
+    //Start creating payload |EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    //update values in authInstance
+    authInstance->expected_opcode = (char)M4_CLIENT_SERVER_AUTH;
+
+    return mex;
+}
+
+int handler_M3_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,EVP_PKEY* privkey){
+    //Format mex |3|len|EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    unsigned char* plaintext = get_asymmetric_decrypted_digital_envelope(ciphertext,ciphertext_size,privkey,&plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption digital envelope\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M3_CLIENT_SERVER_AUTH(plaintext,authInstance) == false){
+        printf("Not consistent info received in M3 auth protocol\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M3_CLIENT_SERVER_AUTH(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on server side
+
+    //declare buffer
+    unsigned char* client_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* server_nickname_rec = (unsigned char*)malloc(sizeof(NICKNAME_SERVER));
+    unsigned char* challenge_to_client_rec = (unsigned char*)malloc(CHALLENGE_32);
+    unsigned char* challenge_to_server_rec = (unsigned char*)malloc(CHALLENGE_32);
+    unsigned char* symmetric_key_rec = (unsigned char*)malloc(GCM_KEY_SIZE);
+
+    int pt_byte_index = 0;
+
+    memcpy(client_nickname_rec,&(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(server_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
+    pt_byte_index+= sizeof(NICKNAME_SERVER);
+
+    memcpy(challenge_to_client_rec, &(plaintext[pt_byte_index]) ,CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+    memcpy(challenge_to_server_rec, &(plaintext[pt_byte_index]) ,CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+    memcpy(symmetric_key_rec, &(plaintext[pt_byte_index]) ,GCM_KEY_SIZE);
+    pt_byte_index += GCM_KEY_SIZE;
+
+    if(strncmp(authInstance->nickname_client,(char *)client_nickname_rec,NICKNAME_LENGTH)!=0){printf("Mismatch client nickname in M3\n");return false;}
+    if(strncmp(authInstance->nickname_server,(char *)server_nickname_rec,sizeof(NICKNAME_SERVER))!=0){printf("Mismatch server nickname in M3\n");return false;}
+    if(memcmp(authInstance->challenge_to_client,challenge_to_client_rec,CHALLENGE_32)!=0){printf("Mismatch challenge_to_client in M3\n");return false;}
+
+    memcpy(authInstance->challenge_to_server, challenge_to_server_rec,CHALLENGE_32);
+    memcpy(authInstance->symmetric_key, symmetric_key_rec,GCM_KEY_SIZE);
+
+    return true;
+}
+
+
+Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EKas(ID_SERVER ID_CLIENT CHallengeS) 
+
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = (char)M4_CLIENT_SERVER_AUTH; 
+
+
+
+    //Start creating plaintext |EKas(ID_SERVER ID_CLIENT CHallengeS)|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(sizeof(NICKNAME_SERVER) + NICKNAME_LENGTH + CHALLENGE_32);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),NICKNAME_SERVER, sizeof(NICKNAME_SERVER));
+    pt_byte_index += sizeof(NICKNAME_SERVER);
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->nickname_client, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->challenge_to_server, CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+
+    //get ciphertext Ekas
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+
+    //Start creating payload |EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    //update values in authInstance
+    authInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_SERVER_AUTH; //EXPECTED OPCODE > SUCCESSFUL_CLIENT_SERVER_AUTH
+
+    return mex;
+}
+
+int handler_M4_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+    //Format mex |4|len|EKas(ID_SERVER ID_CLIENT CHallengeS)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M4_CLIENT_SERVER_AUTH(plaintext,authInstance) == false){
+        printf("Not consistent info received in M4 auth protocol\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M4_CLIENT_SERVER_AUTH(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on client side
+
+    //declare buffer
+    unsigned char* server_nickname_rec = (unsigned char*)malloc(sizeof(NICKNAME_SERVER));
+    unsigned char* client_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* challenge_to_server_rec = (unsigned char*)malloc(CHALLENGE_32);
+
+    int pt_byte_index = 0;
+
+    memcpy(server_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
+    pt_byte_index+= sizeof(NICKNAME_SERVER);
+    
+    memcpy(client_nickname_rec,&(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(challenge_to_server_rec, &(plaintext[pt_byte_index]) ,CHALLENGE_32);
+    pt_byte_index += CHALLENGE_32;
+
+    if(strncmp(authInstance->nickname_server,(char *)server_nickname_rec,sizeof(NICKNAME_SERVER))!=0){printf("Mismatch server nickname in M4\n");return false;}
+    if(strncmp(authInstance->nickname_client,(char *)client_nickname_rec,NICKNAME_LENGTH)!=0){printf("Mismatch client nickname in M4\n");return false;}
+    if(memcmp(authInstance->challenge_to_server,challenge_to_server_rec,CHALLENGE_32)!=0){printf("Mismatch challenge_to_server in M4\n");return false;}
 
     return true;
 }
@@ -506,4 +730,56 @@ unsigned char* get_asymmetric_decrypted_digital_envelope(unsigned char* cipherte
 
     *returning_size = clear_size;
     return clear_buf;
+}
+
+void generate_symmetric_key(unsigned char **key,unsigned long key_len){
+	RAND_poll();
+	int rc = RAND_bytes(*key, key_len);
+	//unsigned long err = ERR_get_error();
+
+	if(rc != 1) {
+		printf("Error in generating key\n");
+		exit(1);
+	}
+}
+
+bool server_authentication(EVP_PKEY** p_prvkey){
+	//find server_key.pem														   		//	22			   //11111111 = 8
+	char prvkey_file_name[sizeof(NICKNAME_SERVER) + 30]; //format ./server_certificates/server_key.pem
+	strcpy(prvkey_file_name,"./server_certificates/");
+	strcat(prvkey_file_name,NICKNAME_SERVER);
+	strcat(prvkey_file_name,"_key.pem");
+	//printf("File to open %s\n",prvkey_file_name);
+
+	// load my private key:
+	FILE* prvkey_file = fopen(prvkey_file_name, "r");
+	if(!prvkey_file){ printf("Error: Unknown file to load for server authentication\n"); return false;}
+	*(p_prvkey) = PEM_read_PrivateKey(prvkey_file, NULL, NULL, NULL);
+	fclose(prvkey_file);
+	if(!*(p_prvkey)){ printf("Error: Wrong password\n"); return false;}
+
+	return true;
+}
+
+bool client_authentication(char* username_client,EVP_PKEY** p_prvkey){
+	char buffer_nickname[NICKNAME_LENGTH];
+	printf("**Authentication**\nUsername -> ");
+	fgets(buffer_nickname, NICKNAME_LENGTH, stdin);
+	sscanf(buffer_nickname, "%s", username_client);
+	username_client[NICKNAME_LENGTH-1]='\0';
+															   		//	21			 //11111111 = 8
+	char prvkey_file_name[NICKNAME_LENGTH + 29]; //format ./client_certificate/nickname_key.pem
+	strcpy(prvkey_file_name,"./client_certificate/");
+	strncat(prvkey_file_name,username_client,NICKNAME_LENGTH);
+	strcat(prvkey_file_name,"_key.pem");
+	//printf("File to open %s\n",prvkey_file_name);
+
+	// load my private key:
+	FILE* prvkey_file = fopen(prvkey_file_name, "r");
+	if(!prvkey_file){ printf("Error: Unknown Username\n"); return false;}
+	*(p_prvkey) = PEM_read_PrivateKey(prvkey_file, NULL, NULL, NULL);
+	fclose(prvkey_file);
+	if(!*(p_prvkey)){ printf("Error: Wrong password\n"); return false;}
+
+	return true;
 }

@@ -46,30 +46,6 @@ void *thread_handler_gaming(void *ptr) {
     pthread_exit(0);
 }
 
-bool client_authentication(char* username_client,EVP_PKEY** p_prvkey){
-	char buffer_nickname[NICKNAME_LENGTH];
-	printf("**Authentication**\nUsername -> ");
-	fgets(buffer_nickname, NICKNAME_LENGTH, stdin);
-	sscanf(buffer_nickname, "%s", username_client);
-	username_client[NICKNAME_LENGTH-1]='\0';
-															   		//	21			 //11111111 = 8
-	char prvkey_file_name[NICKNAME_LENGTH + 29]; //format ./client_certificate/nickname_key.pem
-	strcpy(prvkey_file_name,"./client_certificate/");
-	strncat(prvkey_file_name,username_client,NICKNAME_LENGTH);
-	strcat(prvkey_file_name,"_key.pem");
-	//printf("File to open %s\n",prvkey_file_name);
-
-	// load my private key:
-	FILE* prvkey_file = fopen(prvkey_file_name, "r");
-	if(!prvkey_file){ printf("Error: Unknown Username\n"); return false;}
-	*(p_prvkey) = PEM_read_PrivateKey(prvkey_file, NULL, NULL, NULL);
-	fclose(prvkey_file);
-	if(!*(p_prvkey)){ printf("Error: Wrong password\n"); return false;}
-
-	return true;
-}
-
-
 void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	int port;
     int sock = -1;
@@ -100,7 +76,8 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
     }else{
         printf("**Successfull authentication**\n");
     }
-		
+
+	//**START CONNECTING TO SERVER SOCKET**	
 	do {
 		memset(buffer, 0, COMMAND_SIZE);
 		memset(command, 0, COMMAND_SIZE);
@@ -164,14 +141,11 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
     }
     // listen return 0 if ok
     printf("Sock to play is ready and listening\n");
-	
-	/*-------*/
 
-
-	/* chatting with the server */
 	printf("Socket connected to server\n");
-	//**START AUTHENTICATION AND KEY ESTABLISHMENT**
+	//**END CONNECTING TO SERVER SOCKET**	
 
+	//**START AUTHENTICATION AND KEY ESTABLISHMENT**
 
 	//handling messages
     Message *mex_received = (Message *)malloc (sizeof (Message));
@@ -184,8 +158,11 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	unsigned char* buffer_to_send = (unsigned char *)malloc(mex->payload_len);
 	int byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
 	//BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-	send(sock, buffer_to_send, byte_to_send, 0);
+	int byte_correctly_sent = send(sock, buffer_to_send, byte_to_send, 0);
+	//free(buffer_to_send);
 	free_MESSAGE(&mex);
+
+	printf("M1 sent\n");
 
 	//Waiting for M2_CLIENT_SERVER_AUTH
 	read(sock, &mex_received->opcode, OPCODE_SIZE);
@@ -210,14 +187,53 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 		return;
 	}
 	
-	printf("M2 handled correctly..send m3\n");
-	sleep(10);
+	printf("M2 handled correctly\n");
 
-	//has to receive server response
+	mex = create_M3_CLIENT_SERVER_AUTH(authenticationInstance);
+
+	unsigned char* buffer_M1_to_freed = buffer_to_send;
+	buffer_to_send = (unsigned char *)malloc(mex->payload_len);
+	byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
+	//BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
+	send(sock, buffer_to_send, byte_to_send, 0);
+	//free(buffer_to_send);
+	free_MESSAGE(&mex);
+	unsigned char* buffer_M2_to_freed = buffer_to_send;
+
+	printf("M3 sent\n");
 	
+	//Waiting for M4_CLIENT_SERVER_AUTH
+	read(sock, &mex_received->opcode, OPCODE_SIZE);
+	if(mex_received->opcode != M4_CLIENT_SERVER_AUTH){
+		printf("Expected M4_CLIENT_SERVER_AUTH but arrived another mex\nAbort\n");
+		close(sock);
+		close(sock_to_play);
+		return;
+	}
+	//Retrieve remaining part of message (payload_len)
+	read(sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
+	mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
+	//Retrieve remaining part of message (payload)
+	read_byte = read(sock, mex_received->payload, mex_received->payload_len);
+	//printf("Byte read %d\n", read_byte);
 
+	if( handler_M4_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+		free(authenticationInstance);
+		printf("Error in handler_M4_CLIENT_SERVER_AUTH\nAbort");
+		close(sock);
+		close(sock_to_play);
+		return;
+	}
+	
+	printf("M4 handled correctly\n");
+
+	authenticationInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_SERVER_AUTH; //from now on expected opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
+	
+	//free(buffer_M1_to_freed); //POSTPONED OTHERWISE ERROR
+	//free(buffer_M2_to_freed);
+
+	printf("**Secure connection established**\n");
 	//**END AUTHENTICATION AND KEY ESTABLISHMENT
-
 
 
 	//Tell him on which port I will listen for p2p port (since we cannot listen on the same port of other local players)
