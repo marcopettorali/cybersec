@@ -38,6 +38,37 @@ int printListInBuffer(struct node *head, char * buffer) {
    return strlen(buffer) + 1;
 }
 
+#define MAX_INFO_ADDED 15
+//print the list in a buffer (to be sent)
+char* printListInBufferForClient(struct node *head, char * nickname_client, int user_counter,int* buffer_len) {
+   //format nickname in game with/free nickname_opponent\n
+   char* buffer_max_to_return = (char*)malloc(user_counter * (NICKNAME_LENGTH *2 + MAX_INFO_ADDED) );
+   struct node *ptr = head;
+   //sprintf(buffer,"[");
+	
+   buffer_max_to_return[0]=0; //otherwise randomly initialized
+
+   while(ptr != NULL) {
+      //sprintf(buffer_max_to_return + strlen(buffer_max_to_return),"(%s,%d,%s)",ptr->nickname,ptr->accepted,ptr->adversary_nickname);
+      if(strcmp(nickname_client,ptr->nickname)!=0){
+         if(ptr->accepted == false)
+            sprintf(buffer_max_to_return + strlen(buffer_max_to_return),"%s free\n",ptr->nickname);
+         else
+            sprintf(buffer_max_to_return + strlen(buffer_max_to_return),"%s in game with %s\n",ptr->nickname,ptr->adversary_nickname);
+      }
+      ptr = ptr->next;
+   }
+   //sprintf(buffer + strlen(buffer),"]");
+   //printf("strlen(buffer_max_to_return) -> %ld\n",strlen(buffer_max_to_return));
+   if(strlen(buffer_max_to_return) == 0)
+      sprintf(buffer_max_to_return + strlen(buffer_max_to_return),"Nobody is online, retry after a while\n");
+
+   printf("LIST BUFFER -> %s",buffer_max_to_return);
+
+   *buffer_len = strlen(buffer_max_to_return) + 1;
+   return buffer_max_to_return;
+}
+
 //insert link at the first location
 struct node* insertFirst(struct node **head,long thread_id, char* nickname, struct sockaddr_in address) {
    //create a link
@@ -141,7 +172,7 @@ struct node* get_node_by_nickname(struct node *head,char* nickname) {
    }
 
    //navigate through list
-   while(strcmp(current->nickname,nickname)!=0) {
+   while(strncmp(current->nickname,nickname,strlen(current->nickname))!=0) {
 	
       //if it is last node
       if(current->next == NULL) {

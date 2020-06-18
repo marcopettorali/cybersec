@@ -81,7 +81,8 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
     }
 
     printf("[%s]: is awake\n",node_of_guest->nickname);
-    if(strcmp(node_of_adversary->adversary_nickname,node_of_guest->nickname)==0){
+
+    if(strncmp(node_of_adversary->adversary_nickname,node_of_guest->nickname,strlen(node_of_guest->nickname))==0){
         //he has accepted
         //MODIFY OUR NODE WRITING ADVERSARY_NICK
         node_of_guest->accepted=true;
@@ -96,8 +97,7 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
     return false;
 }
 
-bool check_pending_request(struct node * node_of_guest, int sock){
-    int guest_answer;
+bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationInstance* authenticationInstance){
 
     pthread_mutex_lock(&mutex_list_users); //otherwise can be changed
     if((strcmp(node_of_guest->adversary_nickname,"")==0) || (node_of_guest->accepted==true)){
@@ -109,36 +109,70 @@ bool check_pending_request(struct node * node_of_guest, int sock){
     printf("[%s]: Pending request? true\n",node_of_guest->nickname);
     printf("[%s]: has found a request by %s\n",node_of_guest->nickname,node_of_guest->adversary_nickname);
     printf("[%s]: I have to ask my guest if it wants to accept\n",node_of_guest->nickname);
-    //ASK (send a special opcode = 3)
-        //reset sock to blocking
-        if(SetSocketBlockingEnabled(sock,true)==false){
+
+    if(SetSocketBlockingEnabled(sock,true)==false){
             printf("[%s]: Error in setting blocking socket\nI've to abort!",node_of_guest->nickname);
-        }
-        //send 3 and later send nickname of opponent //AT THE END, ONCE MEX FORMATS HAVE BEEN DEFINED, JUST SEND 1 MEX
-        //then wait for the answer
-        int opcode = 3;
-        send(sock, &opcode, sizeof(int), 0);
-        send(sock,node_of_guest->adversary_nickname,strlen(node_of_guest->adversary_nickname)+1,0);
-        read(sock, &guest_answer, sizeof(int));
-        //printf("[%s]: It should be asked guest --> 1/0? ",node_of_guest->nickname); ///MAYBE USE ANOTHER SOCKET NOT BLOCKING FOR THE CLIENT SO THAT PERIODICALLY CHECK IF SOMEONE HAS REQUESTED TO PLAY WITH HIM
-        //scanf("%d",&guest_answer);
-    //
+    }
+        
+    Message* mex_to_send = create_M_REQ_ACCEPT_PLAY_TO_ACK(node_of_guest->adversary_nickname,authenticationInstance);
+
+    if(send_MESSAGE(sock,mex_to_send)){
+		printf("M_REQ_ACCEPT_PLAY_TO_ACK sent\n");
+	    free_MESSAGE(&mex_to_send);
+    }else{
+        printf("[%s]: Unable to create M_REQ_ACCEPT_PLAY_TO_ACK\nAbort\n",node_of_guest->nickname);
+        return false;
+    }
+    //waiting for response
+    Message *mex_received = (Message *)malloc (sizeof (Message));
+    read_MESSAGE(sock,mex_received);
+
+    if(mex_received->opcode != M_RES_ACCEPT_PLAY_ACK){
+        printf("[%s]: Expecting M_RES_ACCEPT_PLAY_ACK but arrived another mex\n",node_of_guest->nickname);
+        return false;
+    }
+
+    printf("[%s]:M_RES_ACCEPT_PLAY_ACK received\n",node_of_guest->nickname);
+
+    //get response
+    char answer;
+    if( handler_M_RES_ACCEPT_PLAY_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance,&answer) != 1){
+        printf("[%s]: Error in handling M_RES_ACCEPT_PLAY_ACK\n",node_of_guest->nickname);
+        return false;
+    }
+
+    printf("[%s]: M_RES_ACCEPT_PLAY_ACK handled correctly\nanswer -> %c\n",authenticationInstance->nickname_client,answer);
+
+    bool guest_answer = answer=='1'?true:false;
+    printf("[%s]: Answer --> %d\n",authenticationInstance->nickname_client,guest_answer);
     pthread_mutex_lock(&mutex_list_users);
     if(guest_answer==true){ //has accepted
         node_of_guest->accepted=true;
         pthread_cond_signal(&node_of_guest->waiting_response);
         //we should wait until our guest had finished to play
+        //INFORM THE SLAVE ABOUT opponent's info node_of_guest->adversary_nickname
+        //retrieve opponent's pubkey
+        //retrieving PubKeyClient
+        EVP_PKEY* pub_key_opponent = get_and_verify_pub_key_from_certificate(node_of_guest->adversary_nickname);
+        if(pub_key_opponent == NULL){ printf("Error: Unable to retrieve PubKeyOpponent (slave)\n"); return NULL;}
+
+        mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);  
+        if(send_MESSAGE(sock,mex_to_send)){
+            printf("M_PRELIMINARY_INFO_OPPONENT sent\n");
+            free_MESSAGE(&mex_to_send);
+        }else{
+            printf("[%s]: Unable to create M_PRELIMINARY_INFO_OPPONENT\nAbort\n",node_of_guest->nickname);
+            free(authenticationInstance);
+            return false;
+        }
+
     } else{
         node_of_guest->accepted=false;
         strncpy(node_of_guest->adversary_nickname,"",NICKNAME_LENGTH);
         pthread_cond_signal(&node_of_guest->waiting_response);
+        
     }
     pthread_mutex_unlock(&mutex_list_users);
-
-    //reset to non-blocking
-    if(SetSocketBlockingEnabled(sock,false)==false){
-            printf("[%s]: Error in setting non-blocking socket\nI've to abort!",node_of_guest->nickname);
-    }
 
     return true;
 }
@@ -148,16 +182,12 @@ int name=0;
 
 void *thread_handler_client(void *ptr) {
     Connection *conn;
-    long addr = 0;
+    //long addr = 0;
     struct sockaddr_in user_address;
 
-    int msg = MSG_OK;
-    char* buffer = (char*)malloc(COMMAND_SIZE);
     char* command = (char*)malloc(COMMAND_SIZE);
     
     //Just to test
-    int opcode;
-    int len;
     bool result;
     char guest_nickname[NICKNAME_LENGTH]; //WILL BE OBTAINED BY FILE IN WHICH THERA ARE STORED PUBKEYS
     struct node * node_of_guest;
@@ -222,26 +252,31 @@ void *thread_handler_client(void *ptr) {
         /* read message */
         //Even if "L'attesa attiva del processore è immorale" cit.Corsini
         //HAS TO BE NON-BLOCKING OTHERWISE THIS THREAD CANNOT SEE A PENDING REQUEST UNTIL THE CLIENT HAS SENT SOMETHING
-        if(SetSocketBlockingEnabled(conn->sock,false)==false){
-            printf("[%s]: Error in setting non-blocking socket\nI've to abort!",guest_nickname);
-        }
+        
         mex_received = (Message *)malloc (sizeof (Message));
         do{
             //sleep a bit otherwise too much overhead
             sleep(2);
             //CHECK IF PENDING REQUEST if already authenticated
-            if(authenticationInstance != NULL && authenticationInstance->expected_opcode == SUCCESSFUL_CLIENT_SERVER_AUTH)
-                check_pending_request(node_of_guest,conn->sock);
+            if(authenticationInstance != NULL && authenticationInstance->expected_opcode == SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)
+                check_pending_request(node_of_guest,conn->sock,authenticationInstance);
+            if(SetSocketBlockingEnabled(conn->sock,false)==false){
+                printf("[%s]: Error in setting non-blocking socket\nI've to abort!",guest_nickname);
+            }
             //CHECK IF THE CLIENT HAS SENT SOMETHING
         }while(read(conn->sock, &mex_received->opcode, OPCODE_SIZE)<=0);
         
+        if(SetSocketBlockingEnabled(conn->sock,true)==false){
+            printf("[%s]: Error in setting blocking socket\nI've to abort!",guest_nickname);
+        }
+
         //Retrieve remaining part of message (payload_len)
-        read(conn->sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
+        /*read(conn->sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
         mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
         //Retrieve remaining part of message (payload)
         int read_byte = read(conn->sock, mex_received->payload, mex_received->payload_len);
-        //printf("Byte read %d\n", read_byte);
-
+        //printf("Byte read %d\n", read_byte);*/
+        read_MESSAGE_payload(conn->sock,mex_received);
         switch (mex_received->opcode)
         {
             case M1_CLIENT_SERVER_AUTH:
@@ -261,19 +296,14 @@ void *thread_handler_client(void *ptr) {
 
                 //send M2
                 mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
-                if(mex_to_send==NULL){
-                    printf("Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n");
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[Self-said %s]: M2_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[Self-said %s]: Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-
-                //printf("Opcode -> %d\nPayload_len -> %d\n",mex->opcode,mex->payload_len);
-                unsigned char* buffer_to_send = (unsigned char *)malloc(mex_to_send->payload_len);
-                int byte_to_send = add_header(buffer_to_send,mex_to_send->opcode,mex_to_send->payload_len,mex_to_send->payload);
-                //BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-                send(conn->sock, buffer_to_send, byte_to_send, 0);
-
-                free_MESSAGE(&mex_to_send);
 
             break;
             
@@ -281,7 +311,7 @@ void *thread_handler_client(void *ptr) {
                 //received M3
                 //check if expected or not TODO!!!!!!
                 if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != M3_CLIENT_SERVER_AUTH)){
-                    printf("Unexpected M3_CLIENT_SERVER_AUTH\nAbort\n");
+                    printf("[Self-said %s]: Unexpected M3_CLIENT_SERVER_AUTH\nAbort\n",guest_nickname);
                     free(authenticationInstance);
                     goto closing_sock;
                 }
@@ -290,25 +320,17 @@ void *thread_handler_client(void *ptr) {
                     goto closing_sock;
                 }
 
-                printf("M3 handled correctly\n");
+                printf("[Self-said %s]: M3_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
                 //send M4
-                mex_to_send = create_M4_CLIENT_SERVER_AUTH(authenticationInstance);
-                if(mex_to_send==NULL){
-                    printf("Unable to create M4_CLIENT_SERVER_AUTH\nAbort\n");
+                mex_to_send = create_M4_CLIENT_SERVER_AUTH(authenticationInstance);   
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[Self-said %s]: M4_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[Self-said %s]: Unable to create M4_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("M4 created\n");
-                //printf("Opcode -> %d\nPayload_len -> %d\n",mex->opcode,mex->payload_len);
-
-                //TODO FREE BUFFER_to send_m4!!! and use buffer_to_send
-
-                unsigned char *buffer_to_send_M4 = (unsigned char *)malloc(mex_to_send->payload_len);
-                byte_to_send = add_header(buffer_to_send_M4,mex_to_send->opcode,mex_to_send->payload_len,mex_to_send->payload);
-                //BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-                send(conn->sock, buffer_to_send_M4, byte_to_send, 0);
-                printf("M4 sent\n");
 
                 //subscribe the user's presence since authenticated
                 //PROTECTED BY MUTEX
@@ -318,103 +340,207 @@ void *thread_handler_client(void *ptr) {
                 user_counter++; 
                 pthread_mutex_unlock(&mutex_list_users);
 
-                free_MESSAGE(&mex_to_send);
             break;
 
-            default: 
-            printf("Unknown opcode\n");
+            case M_LISTEN_PORT_CLIENT_P2P:
+                //received M_LISTEN_PORT_CLIENT_P2P
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_SERVER_AUTH)){
+                    printf("[Self-said %s]Unexpected M_LISTEN_PORT_CLIENT_P2P since NOT YET AUTHENTICATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_LISTEN_PORT_CLIENT_P2P\n",guest_nickname);
+                int client_port_p2p;
+                if( handler_M_LISTEN_PORT_CLIENT_P2P(mex_received->payload,mex_received->payload_len,authenticationInstance,&client_port_p2p) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+
+                printf("[%s]: M_LISTEN_PORT_CLIENT_P2P handled correctly\n",guest_nickname);
+
+                //adjust port
+                pthread_mutex_lock(&mutex_list_users);
+                node_of_guest->address.sin_port = htons(client_port_p2p);
+                pthread_mutex_unlock(&mutex_list_users);
+
             break;
-        }
 
-        //TO DELETE
-        opcode = mex_received->opcode;
+            case M_REQ_LIST:
+                //received M_REQ_LIST
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
+                    printf("[Self-said %s]Unexpected M_REQ_LIST since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_REQ_LIST\n",guest_nickname);
+                
+                if( handler_M_REQ_LIST(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("[%s]: M_REQ_LIST handled correctly\n",guest_nickname);
 
-        printf("[%s]: we've received -> %d\n",guest_nickname ,mex_received->opcode);
+                mex_to_send = create_M_RES_LIST(authenticationInstance,head_of_list_users,user_counter, mutex_list_users);
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[%s]: M_RES_LIST sent\n",authenticationInstance->nickname_client);
+                    free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[%s]: Unable to create M_RES_LIST\nAbort\n",authenticationInstance->nickname_client);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
 
-        //Come back to blocking socket
-        if(SetSocketBlockingEnabled(conn->sock,true)==false){
-            printf("[%s]: Error in setting blocking socket\nI've to abort!",guest_nickname);
-        }
+            break;
 
-		if (opcode == 1) {
-            printf("[%s]: He's required the list!\n",guest_nickname);
+            case M_CLOSE:
+                //received M_CLOSE
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
+                    printf("[Self-said %s]Unexpected M_CLOSE since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_CLOSE\n",guest_nickname);
+                
+                if( handler_M_CLOSE(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("[%s]: M_CLOSE handled correctly\n",guest_nickname);
+                goto closing_sock;
 
-            //to avoid that some user can be cancelled or added in the meanwhile
-            memset(command, 0, COMMAND_SIZE);
-            pthread_mutex_lock(&mutex_list_users);
-            char * list_buffer; //point to null
-            int lenght;
-			lenght = prepareListUser(&list_buffer);
-            pthread_mutex_unlock(&mutex_list_users);
+            break;
 
-            printList(head_of_list_users);
+            case M_REQ_PLAY:
+                //received M_REQ_PLAY
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
+                    printf("[Self-said %s]Unexpected M_REQ_PLAY since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_REQ_PLAY\n",guest_nickname);
+                
+                if( handler_M_REQ_PLAY(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("[%s]: M_REQ_PLAY handled correctly\n",guest_nickname);
+                
+                mex_to_send = create_M_RES_PLAY_TO_ACK(authenticationInstance);
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[%s]: M_RES_PLAY_TO_ACK sent\n",authenticationInstance->nickname_client);
+                    free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[%s]: Unable to create M_RES_PLAY_TO_ACK\nAbort\n",authenticationInstance->nickname_client);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                
+            break;
 
-            write(conn->sock, &lenght, sizeof(int));
-            write(conn->sock, list_buffer, strlen(list_buffer));
-            free(list_buffer);
+            case M_RES_PLAY_ACK:
+                //received M_RES_PLAY_ACK
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
+                    printf("[Self-said %s]Unexpected M_RES_PLAY_ACK since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_RES_PLAY_ACK\n",guest_nickname);
+                
+                if( handler_M_RES_PLAY_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("[%s]: M_RES_PLAY_ACK handled correctly\n",guest_nickname);
+                printf("[%s]: M_RES_PLAY is FRESH\n",guest_nickname);
 
-		} else if (opcode == 2) {
-            printf("[%s]: He's required to challenge -> ",guest_nickname);
-            memset(buffer, 0, COMMAND_SIZE);
-            read(conn->sock,buffer,COMMAND_SIZE);
-            //In buffer there is the nickname of the opponent he's going to ask to play
-            printf("%s\n",buffer);
-            result = try_to_challenge(buffer,node_of_guest,&adversary_port);
-            printf("[%s]:Has he accepted? %d\n",node_of_guest->nickname,result);
-            //inform the client of the answer
-            write(conn->sock, &result, sizeof(bool));
-            if(result==true){
-                //let che client contact the opponent writing him the ip and port
-                write(conn->sock, &adversary_port, sizeof(uint16_t));
-                    //SHOULD SEND ALSO IP (in our case localhost)
+
+                printf("[%s]:Nickname to contact -> %s\n",node_of_guest->nickname,authenticationInstance->nickname_opponent_required);
+                result = try_to_challenge(authenticationInstance->nickname_opponent_required,node_of_guest,&adversary_port);
+                printf("[%s]:Has he accepted? %d\n",node_of_guest->nickname,result);
+                char response = result?'1':'0';
+                
+                mex_to_send = create_M_RES_PLAY_OPPONENT(response,adversary_port,authenticationInstance);
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[%s]: M_RES_PLAY_OPPONENT sent\n",authenticationInstance->nickname_client);
+                    free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[%s]: Unable to create M_RES_PLAY_OPPONENT\nAbort\n",authenticationInstance->nickname_client);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+
+                if(result == true){
+                    //send to MASTER
+                    printf("[%s]: inform the user of opponent's pubkey\n",authenticationInstance->nickname_client);
+
+                    //retrieve opponent's pubkey
+                    //retrieving PubKeyClient
+                    reformat_nickname(authenticationInstance->nickname_opponent_required);
+                    EVP_PKEY* pub_key_opponent = get_and_verify_pub_key_from_certificate(authenticationInstance->nickname_opponent_required);
+                    if(pub_key_opponent == NULL){ printf("Error: Unable to retrieve PubKeyOpponent (master)\n"); return NULL;}
+            
+                    mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);
+                    if(send_MESSAGE(conn->sock,mex_to_send)){
+                        printf("[%s]: M_PRELIMINARY_INFO_OPPONENT sent\n",authenticationInstance->nickname_client);
+                        //free_MESSAGE(&mex_to_send);
+                    }else{
+                        printf("[%s]: Unable to create M_PRELIMINARY_INFO_OPPONENT\nAbort\n",authenticationInstance->nickname_client);
+                        free(authenticationInstance);
+                        goto closing_sock;
+                    }
+                }
+                
+            break;
+
+
+            case M_INFORM_SERVER_GAME_START:
+                //received M_INFORM_SERVER_GAME_START
+                //check if expected or not TODO!!!!!!
+                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
+                    printf("[Self-said %s]Unexpected M_INFORM_SERVER_GAME_START since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: Received M_INFORM_SERVER_GAME_START\n",guest_nickname);
+                
+                if( handler_M_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                printf("[%s]: M_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+                printf("[%s]: The client has started a game. we've to wait till the end\n",guest_nickname);
+
                 do{
-                    printf("[%s]: Waiting for the end of the game\n",guest_nickname);
-                    /* read message */
-                    //THE THREAD THAT HANDLEs THE PLAYER WHO HAS REQUESTED TO PLAY FOR FIRST IS BLOCKED HERE
-                    read(conn->sock, &opcode, sizeof(int));
-                }while(opcode!=7);
+                    read_MESSAGE(conn->sock,mex_received);
+                }while((mex_received->opcode != M_INFORM_SERVER_GAME_END) || (handler_M_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1));
+
+                printf("[%s]:Received M_INFORM_SERVER_GAME_END\n",guest_nickname);
+                printf("[%s]: M_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
+        
                 //in the meanwhile the server is waiting for the end of game OPCODE
                 printf("[%s]: The client has notified the end of the game\n",guest_nickname);
                 //reset the info in list_user (accepted = false; adversary_nickname = "")
                 pthread_mutex_lock(&mutex_list_users);
                 reset_after_gaming(node_of_guest);
                 pthread_mutex_unlock(&mutex_list_users);
+                
+            break;
 
-            }else{
-                //the opponent has rejected: inform the client about this
-
-                printf("[%s]: The client has been informed about the denial of challenging\n",guest_nickname);
-            }
-           
-
-		} else if(opcode == 6){ //THE CLIENT HAS ALERT THE SERVER THAT HE'S PLAYING P2P
-            do{
-                printf("[%s]: Waiting for the end of the game\n",guest_nickname);
-                //THE THREAD THAT HANDLEs THE PLAYER WHO HAS BEEN CHALLENGED IS BLOCKED HERE
-                read(conn->sock, &opcode, sizeof(int));
-            }while(opcode!=7);
-
-            printf("[%s]: The client has notified the end of the game\n",guest_nickname);
-            //reset the info in list_user (accepted = false; adversary_nickname = "")
-            pthread_mutex_lock(&mutex_list_users);
-            reset_after_gaming(node_of_guest);
-            pthread_mutex_unlock(&mutex_list_users);
-
-
-        }else if(opcode == 8){ //THE CLIENT INFORMs ITS SERVER THREAD ON WHICH PORT HE WILL LISTEN FOR P2P GAMING
-            int client_p2p_port;
-            read(conn->sock, &client_p2p_port, sizeof(int));
-            pthread_mutex_lock(&mutex_list_users);
-            node_of_guest->address.sin_port = htons(client_p2p_port);
-            pthread_mutex_unlock(&mutex_list_users);
-
-        }//else if (strcmp(command, "close") == 0) {
-         else if (opcode == -1) { //closing
-			break;
-		} else {
-			msg = MSG_COMMAND_NOT_FOUND;
-		}
-	
+            default: 
+            printf("Unknown opcode\n");
+            break;
+        }
+        
     }
 
 closing_sock:

@@ -4,6 +4,7 @@
 #define CHALLENGE_32 32
 #include"util.h"
 #include"crypto.h"
+#include"list.h"
 #include <openssl/evp.h>
 
 #ifndef MESSAGE_H
@@ -24,7 +25,22 @@ typedef struct {
     unsigned char symmetric_key[GCM_KEY_SIZE]; //on 128 bit
     EVP_PKEY * server_pub_key;
     char expected_opcode;
+    char nickname_opponent_required[NICKNAME_LENGTH]; //NEEDED for playing
+    unsigned char nonce_server[NONCE_32]; //NEEDED for playing
 } AuthenticationInstance;
+
+typedef struct {
+    char nickname_local[NICKNAME_LENGTH];
+    char nickname_opponent[NICKNAME_LENGTH];
+    unsigned char nonce_local[NONCE_32];
+    unsigned char nonce_opponent[NONCE_32];
+    unsigned char challenge_to_local[CHALLENGE_32];
+    unsigned char challenge_to_opponent[CHALLENGE_32];
+    unsigned char symmetric_key[GCM_KEY_SIZE]; //on 128 bit
+    EVP_PKEY * opponent_pub_key;
+    EVP_PKEY * local_priv_key;
+    char expected_opcode;
+} AuthenticationInstanceToPlay;
 
 #endif
 
@@ -34,6 +50,26 @@ typedef struct {
 #define M3_CLIENT_SERVER_AUTH 102     // |102|len|EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)
 #define M4_CLIENT_SERVER_AUTH 103     // |103|len|EKas(ID_SERVER ID_CLIENT CHallengeS)   
 #define SUCCESSFUL_CLIENT_SERVER_AUTH 104  //Expected from now on opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
+
+#define M_LISTEN_PORT_CLIENT_P2P 105  // |106|len|EKas(ID_CLIENT ID_SERVER PORT) //No worry about replay since for definition only once sent
+#define SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION 106
+
+#define M_REQ_LIST 107  // |107|len|EKas(NONCE_CLIENT) //NO ID_CLIENT ID_SERVER since Kas already link this two entities
+#define M_RES_LIST 108  // |108|len|EKas(NONCE_CLIENT list) //NO ID_CLIENT ID_SERVER since Kas already link this two entities
+
+#define M_REQ_PLAY 109  // |109|len|EKas(ID_OPPONENT NONCE_CLIENT) //Nonce client is to avoid replay of requests (so to be forced to play always with the same opponent) //to ensure freshness of server's response
+#define M_RES_PLAY_TO_ACK 110  // |110|len|EKas(ID_OPPONENT NONCE_CLIENT NONCE_SERVER) //Nonce server is to ensure freshness from server side (otherwise if already requested to play an enemy could force the same player to play always with the prevoius target)
+#define M_RES_PLAY_ACK 111  // |111|len|EKas(ID_OPPONENT NONCE_SERVER) //to prove freshness to server
+#define M_REQ_ACCEPT_PLAY_TO_ACK 112  // |112|len|EKas(ID_OPPONENT NONCE_SERVER) //ask the guest if he wants to pla with ID_OPPONENT //to prove freshness to server 
+#define M_RES_ACCEPT_PLAY_ACK 113  // |113|len|EKas(RESPONSE_1BYTE ID_OPPONENT NONCE_SERVER)
+#define M_RES_PLAY_OPPONENT 114  // |114|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT) //real answer of M_REQ_PLAY
+
+#define M_PRELIMINARY_INFO_OPPONENT 30     // |30|len|EKas(ID_LOCAL ID_OPPONENT PUBkeyOPPONENT)|
+
+#define M_INFORM_SERVER_GAME_START 115  // |115|len|EKas(NONCE_CLIENT) //NONCE_CLIENT will be send againg by client to avoid replay attack to inform erroneously the server about the ending of the game
+#define M_INFORM_SERVER_GAME_END 116  // |116|len|EKas(NONCE_CLIENT) //the same nonce as above
+
+#define M_CLOSE 120  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
 
 
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance * authInstance);
@@ -48,12 +84,63 @@ Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance);
 int handler_M4_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
 bool get_and_verify_info_M4_CLIENT_SERVER_AUTH(unsigned char * plaintext,AuthenticationInstance* authInstance);
 
+Message* create_M_LISTEN_PORT_CLIENT_P2P(int port, AuthenticationInstance * authInstance);
+int handler_M_LISTEN_PORT_CLIENT_P2P(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance, int* port);
+bool get_and_verify_info_M_LISTEN_PORT_CLIENT_P2P(unsigned char * plaintext,AuthenticationInstance* authInstance, int* port);
 
+Message* create_M_REQ_LIST(AuthenticationInstance * authInstance);
+int handler_M_REQ_LIST(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_REQ_LIST(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M_RES_LIST(AuthenticationInstance * authInstance,struct node* head_of_list_users,int user_counter, pthread_mutex_t mutex_list_users);
+int handler_M_RES_LIST(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance, char** list_buffer);
+bool get_and_verify_info_M_RES_LIST(unsigned char * plaintext,int plaintext_size,AuthenticationInstance* authInstance, char** list_buffer);
+
+Message* create_M_REQ_PLAY(char* username_opponent, AuthenticationInstance * authInstance);
+int handler_M_REQ_PLAY(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_REQ_PLAY(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M_RES_PLAY_TO_ACK(AuthenticationInstance * authInstance);
+int handler_M_RES_PLAY_TO_ACK(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_RES_PLAY_TO_ACK(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M_RES_PLAY_ACK(AuthenticationInstance * authInstance);
+int handler_M_RES_PLAY_ACK(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_RES_PLAY_ACK(unsigned char * plaintext,AuthenticationInstance* authInstance);
+
+Message* create_M_REQ_ACCEPT_PLAY_TO_ACK(char* username_opponent, AuthenticationInstance * authInstance); //from master: to ask guest if wants to play
+int handler_M_REQ_ACCEPT_PLAY_TO_ACK(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_REQ_ACCEPT_PLAY_TO_ACK(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M_RES_ACCEPT_PLAY_ACK(char answer, AuthenticationInstance * authInstance); //from slave: to answer the server if wants to play
+int handler_M_RES_ACCEPT_PLAY_ACK(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,char* answer);
+bool get_and_verify_info_M_RES_ACCEPT_PLAY_ACK(unsigned char * plaintext,AuthenticationInstance* authInstance,char* answer);
+Message* create_M_RES_PLAY_OPPONENT(char answer,int opponent_port, AuthenticationInstance * authInstance); //to master: to answer if he has accepted to play
+int handler_M_RES_PLAY_OPPONENT(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,char* answer,int* opponent_port);
+bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char * plaintext,AuthenticationInstance* authInstance,char* answer,int* opponent_port);
+
+Message* create_M_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance);
+int handler_M_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance);
+int handler_M_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance);
+
+Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY * opponent_pub_key, AuthenticationInstance * authInstance); //from server
+int handler_M_PRELIMINARY_INFO_OPPONENT(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,AuthenticationInstanceToPlay * authInstanceToPlay);
+bool get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT(unsigned char * plaintext,AuthenticationInstance* authInstance,AuthenticationInstanceToPlay * authInstanceToPlay);
+
+Message* create_M_CLOSE(AuthenticationInstance * authInstance);
+int handler_M_CLOSE(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M_CLOSE(unsigned char * plaintext,AuthenticationInstance* authInstance);
+
+bool send_MESSAGE(int sock, Message* mex);
+bool read_MESSAGE(int sock, Message* mex_received);
+bool read_MESSAGE_payload(int sock, Message* mex_received);
 void free_MESSAGE(Message** mex);
+void reformat_nickname(char* nick);
 
 //TO BE MOVED INTO pub_key_crypto.h
-EVP_PKEY* get_and_verify_pub_key_from_certificate(AuthenticationInstance * authInstance);
+EVP_PKEY* get_and_verify_pub_key_from_certificate(char* nickname_client);
 EVP_PKEY* get_and_verify_pub_key_from_certificate_CLIENT_SIDE(X509* cert_server);
+int serialize_PEM_Pub_Key(EVP_PKEY* pubkey,unsigned char** pub_key_buffer);
+EVP_PKEY* deserialize_PEM_Pub_Key(int pubkey_size,unsigned char* pubkey_buf);
 unsigned char* get_asymmetric_encrypted_digital_envelope(unsigned char* clear_buf, int clear_size, EVP_PKEY* pubkey, int* returning_size);
 unsigned char* get_asymmetric_decrypted_digital_envelope(unsigned char* ciphertext_and_info_buf, int ciphertext_and_info_buf_size, EVP_PKEY* prvkey, int* returning_size);
 bool server_authentication(EVP_PKEY** p_prvkey);

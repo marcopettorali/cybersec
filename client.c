@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -24,22 +25,30 @@ typedef struct {
     bool master;
 } Connection;
 
+typedef struct {
+    Connection* connection;
+	AuthenticationInstanceToPlay* authenticationInstanceToPlay;
+} InfoToPlay;
+
 void *thread_handler_gaming(void *ptr) {
-    Connection *conn;
+    InfoToPlay *infoToPlay;
     if (!ptr) pthread_exit(0);
-    conn = (Connection *)ptr;
+    infoToPlay = (InfoToPlay *)ptr;
 
     printf("[Thread handling game] : started\n");
     printf("[Thread handling game] : ");
-    if (conn->master == true)
+	printf("[Thread handling game] : Local nickname %s\n",infoToPlay->authenticationInstanceToPlay->nickname_local);
+	printf("[Thread handling game] : Opponent nickname %s\n",infoToPlay->authenticationInstanceToPlay->nickname_opponent);
+    if (infoToPlay->connection->master == true)
         printf("I'm the master of the game\n");
     else
         printf("I'm the slave\n");
-    sleep(5);
+    sleep(7);
 
-    /*
-            HERE SHOULD BE PUT THE GAME LOGIC
-    */
+    //HERE SHOULD BE PUT THE GAME LOGIC
+      
+	      
+    //
 
     printf("[Thread handling game] : ended\n");
 
@@ -52,16 +61,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
     struct sockaddr_in address;
     struct hostent *host;
 
-    int len;
     int msg = MSG_OK;
-
-    char *buffer_received = (char *)malloc(COMMAND_SIZE);
-    char *command_received = (char *)malloc(COMMAND_SIZE);
-
-    // just to try
-    int response;
-    uint16_t opponent_port;
-    struct sockaddr_in opponent;
 
     Connection *connection_to_play;
     pthread_t thread_to_play;
@@ -76,7 +76,6 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
     }else{
         printf("**Successfull authentication**\n");
     }
-
 	//**START CONNECTING TO SERVER SOCKET**	
 	do {
 		memset(buffer, 0, COMMAND_SIZE);
@@ -151,18 +150,17 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
     Message *mex_received = (Message *)malloc (sizeof (Message));
     //handling authentication
     AuthenticationInstance *authenticationInstance = (AuthenticationInstance*)malloc(sizeof(AuthenticationInstance));
+	//handling authentication client_client to play
+    AuthenticationInstanceToPlay *authenticationInstanceToPlay;
 
 	printf("**Establishing secure connection**\n");
 	
 	Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client,authenticationInstance);
-	unsigned char* buffer_to_send = (unsigned char *)malloc(mex->payload_len);
-	int byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
-	//BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-	int byte_correctly_sent = send(sock, buffer_to_send, byte_to_send, 0);
-	//free(buffer_to_send);
+	if(send_MESSAGE(sock,mex))
+		printf("M1 sent\n");
 	free_MESSAGE(&mex);
 
-	printf("M1 sent\n");
+	
 
 	//Waiting for M2_CLIENT_SERVER_AUTH
 	read(sock, &mex_received->opcode, OPCODE_SIZE);
@@ -172,12 +170,8 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 		close(sock_to_play);
 		return;
 	}
-	//Retrieve remaining part of message (payload_len)
-	read(sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
-	mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
-	//Retrieve remaining part of message (payload)
-	int read_byte = read(sock, mex_received->payload, mex_received->payload_len);
-	//printf("Byte read %d\n", read_byte);
+
+	read_MESSAGE_payload(sock,mex_received);
 
 	if( handler_M2_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance,prvkey) != 1){
 		free(authenticationInstance);
@@ -187,20 +181,12 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 		return;
 	}
 	
-	printf("M2 handled correctly\n");
+	printf("M2_CLIENT_SERVER_AUTH handled correctly\n");
 
 	mex = create_M3_CLIENT_SERVER_AUTH(authenticationInstance);
-
-	unsigned char* buffer_M1_to_freed = buffer_to_send;
-	buffer_to_send = (unsigned char *)malloc(mex->payload_len);
-	byte_to_send = add_header(buffer_to_send,mex->opcode,mex->payload_len,mex->payload);
-	//BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-	send(sock, buffer_to_send, byte_to_send, 0);
-	//free(buffer_to_send);
+	if(send_MESSAGE(sock,mex))
+		printf("M3_CLIENT_SERVER_AUTH sent\n");
 	free_MESSAGE(&mex);
-	unsigned char* buffer_M2_to_freed = buffer_to_send;
-
-	printf("M3 sent\n");
 	
 	//Waiting for M4_CLIENT_SERVER_AUTH
 	read(sock, &mex_received->opcode, OPCODE_SIZE);
@@ -210,12 +196,8 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 		close(sock_to_play);
 		return;
 	}
-	//Retrieve remaining part of message (payload_len)
-	read(sock, &mex_received->payload_len, PAYLOAD_LEN_SIZE);
-	mex_received->payload = (unsigned char *)malloc(mex_received->payload_len);
-	//Retrieve remaining part of message (payload)
-	read_byte = read(sock, mex_received->payload, mex_received->payload_len);
-	//printf("Byte read %d\n", read_byte);
+
+	read_MESSAGE_payload(sock,mex_received);
 
 	if( handler_M4_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
 		free(authenticationInstance);
@@ -225,21 +207,20 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 		return;
 	}
 	
-	printf("M4 handled correctly\n");
-
-	authenticationInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_SERVER_AUTH; //from now on expected opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
-	
-	//free(buffer_M1_to_freed); //POSTPONED OTHERWISE ERROR
-	//free(buffer_M2_to_freed);
+	printf("M4_CLIENT_SERVER_AUTH handled correctly\n");
 
 	printf("**Secure connection established**\n");
 	//**END AUTHENTICATION AND KEY ESTABLISHMENT
 
 
 	//Tell him on which port I will listen for p2p port (since we cannot listen on the same port of other local players)
-	int command_to_tell_port = 8;
-	send(sock, &command_to_tell_port, sizeof(int), 0);
-	send(sock, &port_p2p, sizeof(int), 0);
+	mex = create_M_LISTEN_PORT_CLIENT_P2P(port_p2p,authenticationInstance);
+	if(send_MESSAGE(sock,mex))
+		printf("M_LISTEN_PORT_CLIENT_P2P sent\n");
+	free_MESSAGE(&mex);
+
+	authenticationInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION; //from now on expected opcode > SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION
+
 	while (1) {
 		msg = MSG_OK;
 		printf("> ");
@@ -272,73 +253,156 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 					fgets(buffer, COMMAND_SIZE, stdin);
 					sscanf(buffer, "%s", command);
 
-					if (strcmp(command, "chat") == 0) {
-						memset(buffer, 0, COMMAND_SIZE);
-						memset(command, 0, COMMAND_SIZE);
-						printf("What would you like to tell the server? -> ");
-						fgets(buffer, COMMAND_SIZE, stdin);
-						sscanf(buffer, "%s", command);
+					if (strcmp(command, "list") == 0) {
 
-						len = strlen(command);
-						if (send(sock, &len, sizeof(int), 0) < 0) {
-							printf("Send failed\n");
-							break;
+						mex = create_M_REQ_LIST(authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+							printf("M_REQ_LIST sent\n");
+						free_MESSAGE(&mex);
+						
+						//Waiting for M_RES_LIST
+						read(sock, &mex_received->opcode, OPCODE_SIZE);
+						if(mex_received->opcode != M_RES_LIST){
+							printf("Expected M_RES_LIST but arrived another mex\nAbort\n");
+							close(sock);
+							close(sock_to_play);
+							return;
 						}
-						if (send(sock, command, len, 0) < 0) {
-							printf("Send failed\n");
-							break;
+
+						read_MESSAGE_payload(sock,mex_received);
+
+						char * list_buffer = NULL;
+						if( handler_M_RES_LIST(mex_received->payload,mex_received->payload_len,authenticationInstance,&list_buffer) != 1){
+							free(authenticationInstance);
+							printf("Error in handler_M_RES_LIST\nAbort");
+							close(sock);
+							close(sock_to_play);
+							return;
 						}
 						
-					} else if (strcmp(command, "list") == 0) {
-						msg = MSG_OK;
-						//len=1 == TELL SERVER THAT WE WANT THE LIST
-						len = 1;
-						write(sock, &len, sizeof(int));
-						//has to wait for receiving answer
-						/* read lenght buffer */
-						int list_lenght;
-						read(sock, &list_lenght, sizeof(int));
-						printf("Received lenght -> %d\n",list_lenght);
-						char * list_buffer = malloc( sizeof(char) * list_lenght );
-						/* read message */
-						read(sock, list_buffer, list_lenght);
-						//printf("Size of buffer_received %ld",strlen(buffer_received));
-						printf("**FORMAT LIST**\n(<nickname_online_user>,0(free)/1(in game),<nickname_adversary..if exists>)\nList received:\n%s\n",list_buffer);
+						printf("M_RES_LIST handled correctly\n");
+						//print list
+						if(mex_received->payload_len == 1){
+							printf("Nobody is available.. please retry after a while\n");
+						}else{
+							printf("List received:\n%s",list_buffer);
+						}
+
 						free(list_buffer);
+						
 					} else if (strcmp(command, "play") == 0) {
 						msg = MSG_OK;
-						memset(buffer, 0, COMMAND_SIZE);
-						memset(command, 0, COMMAND_SIZE);
+
 						printf("Insert the adversary username -> ");
-						fgets(buffer, COMMAND_SIZE, stdin);
-						sscanf(buffer, "%s", command);
-						//len=2 == TELL SERVER THAT WE WANT TO PLAY WITH username
-						len = 2;
-						write(sock, &len, sizeof(int));
-						write(sock,command,strlen(command)+1); //add the last '\0'
-						//read the answer
-						bool answer;
-						printf("..WAITING FOR OPPONENT'S RESPONSE..\n");
-						read(sock,&answer,sizeof(bool));
-						printf("Response from the opponent -> %d\n",answer);
-						if(answer==false){
+	
+						char username_opponent[NICKNAME_LENGTH];
+						fgets(username_opponent, NICKNAME_LENGTH, stdin);
+						username_opponent[NICKNAME_LENGTH-1]='\0';
+
+						mex = create_M_REQ_PLAY(username_opponent,authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+							printf("M_REQ_PLAY sent\n");
+						free_MESSAGE(&mex);
+
+						//Waiting for M_RES_PLAY_TO_ACK
+						read(sock, &mex_received->opcode, OPCODE_SIZE);
+						if(mex_received->opcode != M_RES_PLAY_TO_ACK){
+							printf("Expected M_RES_PLAY_TO_ACK but arrived another mex\nAbort\n");
+							close(sock);
+							close(sock_to_play);
+							return;
+						}
+
+						read_MESSAGE_payload(sock,mex_received);
+
+						if( handler_M_RES_PLAY_TO_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+							free(authenticationInstance);
+							printf("Error in handler_M_RES_PLAY_TO_ACK\nAbort");
+							close(sock);
+							close(sock_to_play);
+							return;
+						}
+						
+						printf("M_RES_PLAY_TO_ACK handled correctly\n");
+
+						mex = create_M_RES_PLAY_ACK(authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+							printf("M_RES_PLAY_ACK sent\n");
+						free_MESSAGE(&mex);
+
+						//Waiting for M_RES_PLAY_OPPONENT
+						read(sock, &mex_received->opcode, OPCODE_SIZE);
+						if(mex_received->opcode != M_RES_PLAY_OPPONENT){
+							printf("Expected M_RES_PLAY_OPPONENT but arrived another mex\nAbort\n");
+							close(sock);
+							close(sock_to_play);
+							return;
+						}
+
+						read_MESSAGE_payload(sock,mex_received);
+
+						char answer;
+						int opponent_port;
+
+						if( handler_M_RES_PLAY_OPPONENT(mex_received->payload,mex_received->payload_len,authenticationInstance,&answer,&opponent_port) != 1){
+							free(authenticationInstance);
+							printf("Error in M_RES_PLAY_OPPONENT\nAbort");
+							close(sock);
+							close(sock_to_play);
+							return;
+						}
+						
+						printf("M_RES_PLAY_OPPONENT handled correctly\n");
+						printf("Answer -> %c\tPort -> %d\n",answer,opponent_port);
+
+						if((answer!='1')){
 							printf("The opponent has rejected\n");
 						} else
 						{
+							printf("He has accepted\n");
+							
 							//get the parts of the opponent address_in struct (!!---we should read also the ip---!!))
-							read(sock,&opponent_port,sizeof(uint16_t));
 							printf("We'll contact the opponent on %d port\n",opponent_port);
+
+							//WAIT FOR OPPONENT INFO
+							//here will received the MASTER
+							read(sock, &mex_received->opcode, OPCODE_SIZE);
+							if(mex_received->opcode != M_PRELIMINARY_INFO_OPPONENT){
+								printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nAbort\n");
+								close(sock);
+								close(sock_to_play);
+								return;
+							}
+							printf("Received M_PRELIMINARY_INFO_OPPONENT (master)\n");
+							
+							authenticationInstanceToPlay = (AuthenticationInstanceToPlay*)malloc(sizeof(AuthenticationInstanceToPlay));
+							
+							read_MESSAGE_payload(sock,mex_received);
+
+							if( handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload,mex_received->payload_len,authenticationInstance,authenticationInstanceToPlay) != 1){
+								free(authenticationInstance);
+								printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
+								close(sock);
+								close(sock_to_play);
+								return;
+							}
+							
+							printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+							authenticationInstanceToPlay->local_priv_key = prvkey;
+							
+									//SHOULD BE PASSED to thread gaming
+
 
 							// -------------------------
 							//START A NEW THREAD TO handle the game with THE OPPONENT.. WE'LL DO A JOIN ON IT SO WE'll resume the communication with the server only when the game is finished
-							//send e poi dire che è master e passare al thread la connection
+							//send e poi dire che è master e passare al thread infoToPlay
 							int sock_to_play_master = socket(AF_INET, SOCK_STREAM, 0);
 							if (sock_to_play_master <= 0) {
 								fprintf(stderr, "error: cannot create socket for contacting the opponent\n");
 								return;
 							}
 
-							/* connect to the opponent */
+							// connect to the opponent 
 							struct sockaddr_in address_of_opponent;
     						struct hostent* host_opponent;
 
@@ -356,36 +420,50 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 							connection_to_play->sock = sock_to_play_master;
 							connection_to_play->master = true;
 
-							pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)connection_to_play);
+							//Inform the server that we're goign to play so its thread will wait for the end
+							mex = create_M_INFORM_SERVER_GAME_START(authenticationInstance);
+							if(send_MESSAGE(sock,mex))
+								printf("M_INFORM_SERVER_GAME_START sent\n");
+							free_MESSAGE(&mex);
+
+							InfoToPlay* infoToPlay = (InfoToPlay *)malloc(sizeof(InfoToPlay));
+							infoToPlay->connection = connection_to_play;
+							infoToPlay->authenticationInstanceToPlay = authenticationInstanceToPlay;
+
+							pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
 							pthread_join(thread_to_play,NULL);
 
-							printf("Game ended: inform the server about it\n");
-							// ---------------------------------
-							
+							free(infoToPlay);
 
-							//send commandInt= 7 to inform the thread that we've finished
-							int commandInt = 7;
-							write(sock, &commandInt, sizeof(int));
+							printf("Game ended: inform the server about it\n");
+
+							//to inform the server's thread that we've finished
+							mex = create_M_INFORM_SERVER_GAME_END(authenticationInstance);
+							if(send_MESSAGE(sock,mex))
+								printf("M_INFORM_SERVER_GAME_END sent\n");
+							free_MESSAGE(&mex);
 
 							free(connection_to_play);
 							close(sock_to_play_master); //since each time he's the master, he will instantiate another sock
+							
 						}
 						
-
 					} else if (strcmp(command, "help") == 0) {
 						msg = MSG_SHOW_GUIDE_CLIENT_SERVER_INTERACTION;
 						handle_msg(msg);
 					} else if (strcmp(command, "close") == 0) {
-						/* close socket */
-						//to tell the server that we're going to quit
-						len = -1;
-						write(sock, &len, sizeof(int));
+
+						mex = create_M_CLOSE(authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+								printf("M_CLOSE sent\n");
+						free_MESSAGE(&mex);
+
 						close(sock);
 						//close also our socket for gaming
 						close(sock_to_play);
 						//We should come back to main menu so return;
 						return;
-						//break;
+
 					} else {
 						msg = MSG_COMMAND_NOT_FOUND;
 					}
@@ -395,45 +473,103 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 					//One cause: it wants to tell me that someone has requested to challenge me (INT CODE=3)
 					printf("The server has sent something\n");
 					//let's read it
-					int mex_code_received;
-					read(sock, &mex_code_received, sizeof(int));
-					if(mex_code_received == 3){
-						//answer the server
-						/* read message */
-						memset(buffer_received, 0, COMMAND_SIZE);
-        				read(sock, buffer_received, COMMAND_SIZE);
-						printf("%s has requested to challenge you\nDo you want to accept?\n",buffer_received);
-						int answer;
-						scanf("%d",&answer);
-						//SEND ANSWER TO SERVER
-						//es 1 se accettata, 0 se rifiutata
-						send(sock, &answer, sizeof(int), 0);
-						//then when the opponent will contact us he will contact our socket and "select" will alert us
+					
+					read_MESSAGE(sock,mex_received);
+
+					if(mex_received->opcode == M_REQ_ACCEPT_PLAY_TO_ACK){
+						if( handler_M_REQ_ACCEPT_PLAY_TO_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+							free(authenticationInstance);
+							printf("Error in handler_M_REQ_ACCEPT_PLAY_TO_ACK\nAbort");
+							close(sock);
+							close(sock_to_play);
+							return;
+						}
+					
+						printf("M_REQ_ACCEPT_PLAY_TO_ACK handled correctly\n"); //for debug
+
+						printf("%s has requested to challenge you\nDo you want to accept?\n",authenticationInstance->nickname_opponent_required);
+						char answer;
+						scanf(" %c",&answer);
+						
+						
+						mex = create_M_RES_ACCEPT_PLAY_ACK(answer,authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+								printf("M_RES_ACCEPT_PLAY_ACK sent\n");
+						free_MESSAGE(&mex);
+
+						//WAIT FOR M_PRELIMINARY_INFO_OPPONENT
+						read(sock, &mex_received->opcode, OPCODE_SIZE);
+						if(mex_received->opcode == M_PRELIMINARY_INFO_OPPONENT){
+							//here will received the slave
+							printf("The server has sent the opponent's info (slave)\n");
+							read_MESSAGE_payload(sock,mex_received);
+
+							if( handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload,mex_received->payload_len,authenticationInstance,authenticationInstanceToPlay) != 1){
+								free(authenticationInstance);
+								printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
+								close(sock);
+								close(sock_to_play);
+								return;
+							}
+						
+							printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+							authenticationInstanceToPlay->local_priv_key = prvkey;
+						} else{
+							printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nABORT\n");
+							free(authenticationInstance);
+								printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
+								close(sock);
+								close(sock_to_play);
+								return;
+						}
 					}
+						
+					//then when the opponent will contact us he will contact our socket and "select" will alert us
+					
+					
 				}else if(i == sock_to_play){
 					//do ACCEPT A NEW INCOMING REQUEST
-					
+					//printf("In sock_to_play\n");	
 					/* accept incoming connections */
 					connection_to_play = (Connection *)malloc(sizeof(Connection));
+					//printf("After instantiation\n");
 					connection_to_play->sock = accept(sock_to_play, &connection_to_play->address, &connection_to_play->addr_len);
+					//printf("After accept\n");
+					//printf("connection_to_play->sock %d\n",connection_to_play->sock);
 					// check if accept has return a valid socketID
-					if (connection_to_play->sock <= 0) {
-						free(connection_to_play);
-					} else {
-						/* start a new thread and wait for it */
-						//send commandInt=6 (inform the server that we're goign to play) so its thread will wait for the end
-						int commandInt = 6;
-						write(sock, &commandInt, sizeof(int));
+					if (connection_to_play->sock > 0) {
+						printf("Someone has contact us to play\n");
+			
+						mex = create_M_INFORM_SERVER_GAME_START(authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+								printf("M_INFORM_SERVER_GAME_START sent\n");
+						free_MESSAGE(&mex);
+
 						connection_to_play->master=false; //to state that this thread has been contected
-						pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)connection_to_play);
+
+						InfoToPlay* infoToPlay = (InfoToPlay *)malloc(sizeof(InfoToPlay));
+						infoToPlay->connection = connection_to_play;
+						infoToPlay->authenticationInstanceToPlay = authenticationInstanceToPlay;
+
+						pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
 						pthread_join(thread_to_play,NULL);
+						
+						free(infoToPlay);
 
 						printf("Game ended: inform the server about it\n");
-						//send commandInt= 7 to inform the thread that we've finished
-						commandInt = 7;
-						write(sock, &commandInt, sizeof(int));
-						
+
+						mex = create_M_INFORM_SERVER_GAME_END(authenticationInstance);
+						if(send_MESSAGE(sock,mex))
+								printf("M_INFORM_SERVER_GAME_END sent\n");
+						free_MESSAGE(&mex);
+
+
+					
+					}else{
+						printf("Oh dear, something went wrong with accept()! %s\n", strerror(errno));
 					}
+
+					close(connection_to_play->sock);
 					free(connection_to_play);
 					/*--------------------*/
 				}

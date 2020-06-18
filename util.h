@@ -15,7 +15,7 @@
 
 void DEBUG(char* msg, const char* function);
 void EXCEPTION(char* msg, const char* function);
-
+void handle_msg(int msg);
 
 #define COMMAND_SIZE 128
 #define MSG_OK 1

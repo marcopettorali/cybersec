@@ -1,6 +1,9 @@
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include"util.h"
 
+#ifndef LIST_H
+#define LIST_H
 struct node {
    //Info of local player
    char nickname[NICKNAME_LENGTH];
@@ -13,9 +16,11 @@ struct node {
    pthread_cond_t waiting_response;
    struct node *next;
 };
+#endif
 
 void printList(struct node *head); //for debug
 int printListInBuffer(struct node *head, char * buffer);
+char* printListInBufferForClient(struct node *head,char* nickname_client, int user_counter,int* buffer_len);
 struct node* insertFirst(struct node **head,long thread_id, char* nickname, struct sockaddr_in address);
 struct node* deleteFirst(struct node **head);
 bool isEmpty(struct node *head);
