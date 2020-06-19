@@ -521,12 +521,6 @@ Message* create_M_REQ_LIST(AuthenticationInstance * authInstance){
     unsigned char* plaintext_buffer = (unsigned char *)malloc(NONCE_32);
     int pt_byte_index = 0;
 
-    /*memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->nickname_client, NICKNAME_LENGTH);
-    pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]),NICKNAME_SERVER, sizeof(NICKNAME_SERVER));
-    pt_byte_index += sizeof(NICKNAME_SERVER);*/
-
     generate_nonce(&nonce,NONCE_32);
 
     memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
@@ -1754,6 +1748,47 @@ int handler_M_CLOSE(unsigned char* payload,unsigned int payload_len,Authenticati
     return 1;
 }
 
+
+
+Message* create_M1_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay * authInstanceToPlay){
+    //|op|len|ID_LOCAL ID_OPPONENT NONCEa|
+    unsigned char *nonce = (unsigned char *)malloc(NONCE_32);
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+    
+    mex->opcode = M1_CLIENT_CLIENT_AUTH; 
+
+    mex->payload = (unsigned char *)malloc(2 * NICKNAME_LENGTH + NONCE_32);
+    
+    //Start creating payload |ID_LOCAL ID_OPPONENT NONCEa|
+    memcpy(&(mex->payload[byte_index]),authInstanceToPlay->nickname_local, NICKNAME_LENGTH);
+    byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(mex->payload[byte_index]),authInstanceToPlay->nickname_opponent, NICKNAME_LENGTH);
+    byte_index += NICKNAME_LENGTH;
+    
+    generate_nonce(&nonce,NONCE_32);
+
+    memcpy(&(mex->payload[byte_index]), &nonce[0], NONCE_32);
+    byte_index += NONCE_32;
+
+    mex->payload_len = byte_index;
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+
+
+    //Initialize values in authInstanceToPlay
+    memcpy(authInstanceToPlay->nonce_local, &nonce[0], NONCE_32);
+
+    free(nonce);
+
+    return mex;
+}
+
+
+
+
 bool get_and_verify_info_M_CLOSE(unsigned char * plaintext,AuthenticationInstance* authInstance){
     //Call on server side
 
@@ -1857,7 +1892,7 @@ EVP_PKEY* get_and_verify_pub_key_from_certificate(char * nickname_client){
 	strncat(certificate_file_name,nickname_client,NICKNAME_LENGTH);
 	strcat(certificate_file_name,"_cert.pem");
 
-printf("certificate-file_name->\n %s\n",certificate_file_name);
+    //printf("certificate-file_name->\n %s\n",certificate_file_name);
 
     //open file to get the certificate
     FILE* cert_file = fopen(certificate_file_name, "r");

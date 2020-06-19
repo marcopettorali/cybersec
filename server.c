@@ -159,7 +159,7 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
         mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);  
         if(send_MESSAGE(sock,mex_to_send)){
             printf("M_PRELIMINARY_INFO_OPPONENT sent\n");
-            free_MESSAGE(&mex_to_send);
+            //free_MESSAGE(&mex_to_send);
         }else{
             printf("[%s]: Unable to create M_PRELIMINARY_INFO_OPPONENT\nAbort\n",node_of_guest->nickname);
             free(authenticationInstance);

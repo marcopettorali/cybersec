@@ -34,13 +34,19 @@ void *thread_handler_gaming(void *ptr) {
     InfoToPlay *infoToPlay;
     if (!ptr) pthread_exit(0);
     infoToPlay = (InfoToPlay *)ptr;
+	Message* mex;
 
     printf("[Thread handling game] : started\n");
     printf("[Thread handling game] : ");
 	printf("[Thread handling game] : Local nickname %s\n",infoToPlay->authenticationInstanceToPlay->nickname_local);
 	printf("[Thread handling game] : Opponent nickname %s\n",infoToPlay->authenticationInstanceToPlay->nickname_opponent);
-    if (infoToPlay->connection->master == true)
+    if (infoToPlay->connection->master == true){
         printf("I'm the master of the game\n");
+		mex = create_M1_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
+		if(send_MESSAGE(infoToPlay->connection->sock,mex))
+			printf("M1_CLIENT_CLIENT_AUTH sent\n");
+		free_MESSAGE(&mex);
+	}
     else
         printf("I'm the slave\n");
     sleep(7);
@@ -74,7 +80,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	if(client_authentication(username_client,&prvkey)==false){
         exit(1);
     }else{
-        printf("**Successfull authentication**\n");
+        printf("**Successful authentication**\n");
     }
 	//**START CONNECTING TO SERVER SOCKET**	
 	do {
@@ -497,30 +503,32 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 								printf("M_RES_ACCEPT_PLAY_ACK sent\n");
 						free_MESSAGE(&mex);
 
-						//WAIT FOR M_PRELIMINARY_INFO_OPPONENT
-						read(sock, &mex_received->opcode, OPCODE_SIZE);
-						if(mex_received->opcode == M_PRELIMINARY_INFO_OPPONENT){
-							//here will received the slave
-							printf("The server has sent the opponent's info (slave)\n");
-							read_MESSAGE_payload(sock,mex_received);
+						if(answer=='1'){
+							//WAIT FOR M_PRELIMINARY_INFO_OPPONENT
+							read(sock, &mex_received->opcode, OPCODE_SIZE);
+							if(mex_received->opcode == M_PRELIMINARY_INFO_OPPONENT){
+								//here will received the slave
+								printf("The server has sent the opponent's info (slave)\n");
+								read_MESSAGE_payload(sock,mex_received);
 
-							if( handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload,mex_received->payload_len,authenticationInstance,authenticationInstanceToPlay) != 1){
+								if( handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload,mex_received->payload_len,authenticationInstance,authenticationInstanceToPlay) != 1){
+									free(authenticationInstance);
+									printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
+									close(sock);
+									close(sock_to_play);
+									return;
+								}
+							
+								printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+								authenticationInstanceToPlay->local_priv_key = prvkey;
+							} else{
+								printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nABORT\n");
 								free(authenticationInstance);
-								printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
-								close(sock);
-								close(sock_to_play);
-								return;
+									printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
+									close(sock);
+									close(sock_to_play);
+									return;
 							}
-						
-							printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
-							authenticationInstanceToPlay->local_priv_key = prvkey;
-						} else{
-							printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nABORT\n");
-							free(authenticationInstance);
-								printf("Error in M_PRELIMINARY_INFO_OPPONENT\nAbort");
-								close(sock);
-								close(sock_to_play);
-								return;
 						}
 					}
 						
