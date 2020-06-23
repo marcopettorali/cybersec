@@ -62,16 +62,21 @@ typedef struct {
 #define M_RES_PLAY_ACK 111  // |111|len|EKas(ID_OPPONENT NONCE_SERVER) //to prove freshness to server
 #define M_REQ_ACCEPT_PLAY_TO_ACK 112  // |112|len|EKas(ID_OPPONENT NONCE_SERVER) //ask the guest if he wants to pla with ID_OPPONENT //to prove freshness to server 
 #define M_RES_ACCEPT_PLAY_ACK 113  // |113|len|EKas(RESPONSE_1BYTE ID_OPPONENT NONCE_SERVER)
-#define M_RES_PLAY_OPPONENT 114  // |114|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT) //real answer of M_REQ_PLAY
+#define M_RES_PLAY_OPPONENT 114  // |114|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT) //real answer of M_REQ_PLAY
 
 #define M_PRELIMINARY_INFO_OPPONENT 30     // |30|len|EKas(ID_LOCAL ID_OPPONENT PUBkeyOPPONENT)|
 
-#define M_INFORM_SERVER_GAME_START 115  // |115|len|EKas(NONCE_CLIENT) //NONCE_CLIENT will be send againg by client to avoid replay attack to inform erroneously the server about the ending of the game
-#define M_INFORM_SERVER_GAME_END 116  // |116|len|EKas(NONCE_CLIENT) //the same nonce as above
+#define M1_INFORM_SERVER_GAME_START 115  // |115|len|EKas(NONCE_CLIENT) //NONCE_CLIENT will be send againg by client to avoid replay attack to inform erroneously the server about the ending of the game
+#define M2_INFORM_SERVER_GAME_START 116  // |116|len|EKas(NONCE_CLIENT NONCE_SERVER) //server->client
+#define M3_INFORM_SERVER_GAME_START 117  // |116|len|EKas(NONCE_SERVER) //client->server for freshness
 
-#define M_CLOSE 120  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
+#define M1_INFORM_SERVER_GAME_END 118  // |115|len|EKas(NONCE_CLIENT) //client->server
+#define M2_INFORM_SERVER_GAME_END 119  // |116|len|EKas(NONCE_CLIENT NONCE_SERVER) //server->client
+#define M3_INFORM_SERVER_GAME_END 120  // |116|len|EKas(NONCE_SERVER) //client->server for freshness
 
-#define M1_CLIENT_CLIENT_AUTH 121     // |121|len|ID_LOCAL ID_OPPONENT NONCEa|
+#define M_CLOSE 122  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
+
+#define M1_CLIENT_CLIENT_AUTH 30     // |121|len|ID_LOCAL ID_OPPONENT NONCEa|
 
 
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance * authInstance);
@@ -117,12 +122,25 @@ Message* create_M_RES_PLAY_OPPONENT(char answer,int opponent_port, Authenticatio
 int handler_M_RES_PLAY_OPPONENT(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,char* answer,int* opponent_port);
 bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char * plaintext,AuthenticationInstance* authInstance,char* answer,int* opponent_port);
 
-Message* create_M_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance);
-int handler_M_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
-bool get_and_verify_info_M_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance);
-Message* create_M_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance);
-int handler_M_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
-bool get_and_verify_info_M_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M1_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance);
+int handler_M1_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M1_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M2_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance);
+int handler_M2_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M2_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M3_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance);
+int handler_M3_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M3_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance);
+
+Message* create_M1_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance);
+int handler_M1_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M1_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M2_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance);
+int handler_M2_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M2_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance);
+Message* create_M3_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance);
+int handler_M3_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
+bool get_and_verify_info_M3_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance);
 
 Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY * opponent_pub_key, AuthenticationInstance * authInstance); //from server
 int handler_M_PRELIMINARY_INFO_OPPONENT(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,AuthenticationInstanceToPlay * authInstanceToPlay);

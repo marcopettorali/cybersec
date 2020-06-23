@@ -1288,15 +1288,15 @@ bool get_and_verify_info_M_RES_ACCEPT_PLAY_ACK(unsigned char * plaintext,Authent
 
 
 Message* create_M_RES_PLAY_OPPONENT(char response,int opponent_port, AuthenticationInstance * authInstance){
-    //Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT)|
+    //Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
     int byte_index = 0;
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
  
     mex->opcode = M_RES_PLAY_OPPONENT;
 
-    //Start creating plaintext |RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT|
-    unsigned char* plaintext_buffer = (unsigned char *)malloc(sizeof(char) + sizeof(int) + NICKNAME_LENGTH + 2 * NONCE_32);
+    //Start creating plaintext |RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(sizeof(char) + sizeof(int) + NICKNAME_LENGTH + NONCE_32);
     int pt_byte_index = 0;
 
     memcpy(&(plaintext_buffer[pt_byte_index]),&response, sizeof(char));
@@ -1307,9 +1307,6 @@ Message* create_M_RES_PLAY_OPPONENT(char response,int opponent_port, Authenticat
 
     memcpy(&(plaintext_buffer[pt_byte_index]),authInstance->nickname_opponent_required, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_server, NONCE_32);
-    pt_byte_index += NONCE_32;
 
     memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_client, NONCE_32);
     pt_byte_index += NONCE_32;
@@ -1327,7 +1324,7 @@ Message* create_M_RES_PLAY_OPPONENT(char response,int opponent_port, Authenticat
     //Allocating enough space for the payload
     mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
 
-    //Start creating payload |EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT)|
+    //Start creating payload |EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
     memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     byte_index += ciphertext_and_info_buf_size;
 
@@ -1342,7 +1339,7 @@ Message* create_M_RES_PLAY_OPPONENT(char response,int opponent_port, Authenticat
 }
 
 int handler_M_RES_PLAY_OPPONENT(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,char* answer,int* opponent_port){
-    //Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT)|
+    //Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
 
     //get plaintext
     unsigned char* ciphertext = &(payload[0]);
@@ -1366,7 +1363,6 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char * plaintext,Authentic
     char* response_rec = (char*)malloc(sizeof(char));
     int* opponent_port_rec = (int*)malloc(sizeof(int));
     unsigned char* opponent_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
     unsigned char* nonce_client_rec = (unsigned char*)malloc(NONCE_32);
 
     int pt_byte_index = 0;
@@ -1380,15 +1376,11 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char * plaintext,Authentic
     memcpy(opponent_nickname_rec,&(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
-    pt_byte_index += NONCE_32;
-
     memcpy(nonce_client_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
     pt_byte_index += NONCE_32;
 
     //check
     if(strncmp(authInstance->nickname_opponent_required,(char *)opponent_nickname_rec,NICKNAME_LENGTH)!=0){printf("Mismatch opponent nickname in M_RES_PLAY_OPPONENT\n");return false;}
-    if(memcmp(authInstance->nonce_server,nonce_server_rec,NONCE_32)!=0){printf("Mismatch nonce_server in M_RES_PLAY_OPPONENT\n");return false;}
     if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce_client in M_RES_PLAY_OPPONENT\n");return false;}
 
     //copy params into params
@@ -1398,7 +1390,6 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char * plaintext,Authentic
     free(response_rec);
     free(opponent_port_rec);
     free(opponent_nickname_rec);
-    free(nonce_server_rec);
     free(nonce_client_rec);
 
     return true;
@@ -1523,14 +1514,14 @@ bool get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT(unsigned char * plaintext,A
 
 
 
-Message* create_M_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance){
+Message* create_M1_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance){
     //Mex format |op|len|EKas(NONCE_CLIENT)| //otherwise replay attack
     unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
     int byte_index = 0;
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
  
-    mex->opcode = M_INFORM_SERVER_GAME_START;
+    mex->opcode = M1_INFORM_SERVER_GAME_START;
 
     //Start creating plaintext |NONCE_CLIENT|
     unsigned char* plaintext_buffer = (unsigned char *)malloc(NONCE_32);
@@ -1544,7 +1535,7 @@ Message* create_M_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance
     //get ciphertext Ekas
     int ciphertext_and_info_buf_size;
     unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
-    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M_INFORM_SERVER_GAME_START\n"); return NULL; }
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M1_INFORM_SERVER_GAME_START\n"); return NULL; }
 
     //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     //to debug
@@ -1572,7 +1563,7 @@ Message* create_M_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance
     return mex;
 }
 
-int handler_M_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+int handler_M1_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
     //Format mex |op|len|EKas(NONCE_CLIENT)
 
     //get plaintext
@@ -1581,17 +1572,17 @@ int handler_M_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int paylo
     int plaintext_size;
     
     unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
-    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M_INFORM_SERVER_GAME_START\nAbort\n");return 0;}
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M1_INFORM_SERVER_GAME_START\nAbort\n");return 0;}
     //extract and verify info in plaintext
-    if(get_and_verify_info_M_INFORM_SERVER_GAME_START(plaintext,authInstance) == false){
-        printf("Not consistent info received in M_INFORM_SERVER_GAME_START\nAbort\n");
+    if(get_and_verify_info_M1_INFORM_SERVER_GAME_START(plaintext,authInstance) == false){
+        printf("Not consistent info received in M1_INFORM_SERVER_GAME_START\nAbort\n");
         return 0;
     }
 
     return 1;
 }
 
-bool get_and_verify_info_M_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance){
+bool get_and_verify_info_M1_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance){
     //Call on server side
 
     //declare buffer (NONCE_CLIENT)
@@ -1602,7 +1593,7 @@ bool get_and_verify_info_M_INFORM_SERVER_GAME_START(unsigned char * plaintext,Au
     memcpy(nonce_client_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
     pt_byte_index += NONCE_32;
 
-    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M_INFORM_SERVER_GAME_START but not yet authenticated client\n");return false;}
+    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M1_INFORM_SERVER_GAME_START but not yet authenticated client\n");return false;}
 
     memcpy(authInstance->nonce_client, nonce_client_rec, NONCE_32);
 
@@ -1610,14 +1601,189 @@ bool get_and_verify_info_M_INFORM_SERVER_GAME_START(unsigned char * plaintext,Au
     return true;
 }
 
+Message* create_M2_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EKas(NONCE_CLIENT NONCE_SERVER)| //otherwise replay attack
+    unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = M2_INFORM_SERVER_GAME_START;
 
-Message* create_M_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
+    //Start creating plaintext |NONCE_CLIENT NONCE_SERVER|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(2 * NONCE_32);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_client, NONCE_32);
+    pt_byte_index += NONCE_32;
+    
+    generate_nonce(&nonce,NONCE_32);
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    //get ciphertext Ekas
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M2_INFORM_SERVER_GAME_START\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+    //Start creating payload |EKas(NONCE_CLIENT NONCE_SERVER)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    //update values in authInstance
+    memcpy(authInstance->nonce_server, &nonce[0], NONCE_32);
+
+    free(nonce);
+
+    return mex;
+}
+
+int handler_M2_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+    //Format mex |op|len|EKas(NONCE_CLIENT NONCE_SERVER)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M2_INFORM_SERVER_GAME_START\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M2_INFORM_SERVER_GAME_START(plaintext,authInstance) == false){
+        printf("Not consistent info received in M2_INFORM_SERVER_GAME_START\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M2_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on client side
+
+    //declare buffer (NONCE_CLIENT NONCE_SERVER)
+    unsigned char* nonce_client_rec = (unsigned char*)malloc(NONCE_32);
+    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
+
+    int pt_byte_index = 0;
+
+    memcpy(nonce_client_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce_client in M2_INFORM_SERVER_GAME_START\n");return false;}
+
+    memcpy(authInstance->nonce_server, nonce_server_rec, NONCE_32);
+
+    free(nonce_client_rec);
+    free(nonce_server_rec);
+    return true;
+}
+
+
+Message* create_M3_INFORM_SERVER_GAME_START(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EKas(NONCE_SERVER)| //otherwise replay attack
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = M3_INFORM_SERVER_GAME_START;
+
+    //Start creating plaintext |NONCE_SERVER|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(NONCE_32);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_server, NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    //get ciphertext Ekas
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M3_INFORM_SERVER_GAME_START\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+    //Start creating payload |EKas(NONCE_SERVER)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    return mex;
+}
+
+int handler_M3_INFORM_SERVER_GAME_START(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+    //Format mex |op|len|EKas(NONCE_SERVER)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M3_INFORM_SERVER_GAME_START\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M3_INFORM_SERVER_GAME_START(plaintext,authInstance) == false){
+        printf("Not consistent info received in M3_INFORM_SERVER_GAME_START\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M3_INFORM_SERVER_GAME_START(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on server side
+
+    //declare buffer (NONCE_SERVER)
+    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
+
+    int pt_byte_index = 0;
+
+    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M3_INFORM_SERVER_GAME_START but not yet authenticated client\n");return false;}
+    if(memcmp(authInstance->nonce_server,nonce_server_rec,NONCE_32)!=0){printf("Mismatch nonce_server in M3_INFORM_SERVER_GAME_START\n");return false;}
+
+    free(nonce_server_rec);
+    return true;
+}
+
+
+
+Message* create_M1_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
     //Mex format |op|len|EKas(NONCE_CLIENT)| //otherwise replay attack
     int byte_index = 0;
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
  
-    mex->opcode = M_INFORM_SERVER_GAME_END;
+    mex->opcode = M1_INFORM_SERVER_GAME_END;
 
     //Start creating plaintext |NONCE_CLIENT|
     unsigned char* plaintext_buffer = (unsigned char *)malloc(NONCE_32);
@@ -1629,7 +1795,7 @@ Message* create_M_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
     //get ciphertext Ekas
     int ciphertext_and_info_buf_size;
     unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
-    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M_INFORM_SERVER_GAME_END\n"); return NULL; }
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M1_INFORM_SERVER_GAME_END\n"); return NULL; }
 
     //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     //to debug
@@ -1652,7 +1818,7 @@ Message* create_M_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
     return mex;
 }
 
-int handler_M_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+int handler_M1_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
     //Format mex |op|len|EKas(NONCE_CLIENT)
 
     //get plaintext
@@ -1661,17 +1827,17 @@ int handler_M_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload
     int plaintext_size;
     
     unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
-    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M_INFORM_SERVER_GAME_END\nAbort\n");return 0;}
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M1_INFORM_SERVER_GAME_END\nAbort\n");return 0;}
     //extract and verify info in plaintext
-    if(get_and_verify_info_M_INFORM_SERVER_GAME_END(plaintext,authInstance) == false){
-        printf("Not consistent info received in M_INFORM_SERVER_GAME_END\nAbort\n");
+    if(get_and_verify_info_M1_INFORM_SERVER_GAME_END(plaintext,authInstance) == false){
+        printf("Not consistent info received in M1_INFORM_SERVER_GAME_END\nAbort\n");
         return 0;
     }
 
     return 1;
 }
 
-bool get_and_verify_info_M_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance){
+bool get_and_verify_info_M1_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance){
     //Call on server side
 
     //declare buffer (NONCE_CLIENT)
@@ -1682,9 +1848,183 @@ bool get_and_verify_info_M_INFORM_SERVER_GAME_END(unsigned char * plaintext,Auth
     memcpy(nonce_client_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
     pt_byte_index += NONCE_32;
 
-    if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce_client in M_INFORM_SERVER_GAME_END\n");return false;}
-    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M_INFORM_SERVER_GAME_END but not yet authenticated client\n");return false;}
+    if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce_client in M1_INFORM_SERVER_GAME_END\n");return false;}
+    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M1_INFORM_SERVER_GAME_END but not yet authenticated client\n");return false;}
 
+    return true;
+}
+
+Message* create_M2_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EKas(NONCE_CLIENT NONCE_SERVER)| //otherwise replay attack
+    unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = M2_INFORM_SERVER_GAME_END;
+
+    //Start creating plaintext |NONCE_CLIENT NONCE_SERVER|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(2 * NONCE_32);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_client, NONCE_32);
+    pt_byte_index += NONCE_32;
+    
+    generate_nonce(&nonce,NONCE_32);
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    //get ciphertext Ekas
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M2_INFORM_SERVER_GAME_END\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+    //Start creating payload |EKas(NONCE_CLIENT NONCE_SERVER)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    //update values in authInstance
+    memcpy(authInstance->nonce_server, &nonce[0], NONCE_32);
+
+    free(nonce);
+
+    return mex;
+}
+
+int handler_M2_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+    //Format mex |op|len|EKas(NONCE_CLIENT NONCE_SERVER)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M2_INFORM_SERVER_GAME_END\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M2_INFORM_SERVER_GAME_END(plaintext,authInstance) == false){
+        printf("Not consistent info received in M2_INFORM_SERVER_GAME_END\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M2_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on client side
+
+    //declare buffer (NONCE_CLIENT NONCE_SERVER)
+    unsigned char* nonce_client_rec = (unsigned char*)malloc(NONCE_32);
+    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
+
+    int pt_byte_index = 0;
+
+    memcpy(nonce_client_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    if(memcmp(authInstance->nonce_client,nonce_client_rec,NONCE_32)!=0){printf("Mismatch nonce_client in M2_INFORM_SERVER_GAME_END\n");return false;}
+
+    memcpy(authInstance->nonce_server, nonce_server_rec, NONCE_32);
+
+    free(nonce_client_rec);
+    free(nonce_server_rec);
+    return true;
+}
+
+
+Message* create_M3_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
+    //Mex format |op|len|EKas(NONCE_SERVER)| //otherwise replay attack
+    int byte_index = 0;
+    //create returning mex
+    Message *mex = (Message *)malloc (sizeof (Message));
+ 
+    mex->opcode = M3_INFORM_SERVER_GAME_END;
+
+    //Start creating plaintext |NONCE_SERVER|
+    unsigned char* plaintext_buffer = (unsigned char *)malloc(NONCE_32);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_server, NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    //get ciphertext Ekas
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M3_INFORM_SERVER_GAME_END\n"); return NULL; }
+
+    //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    //to debug
+    //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+    
+    //Allocating enough space for the payload
+    mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+
+    //Start creating payload |EKas(NONCE_SERVER)|
+    memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+
+    //FREE STUFF!!
+    //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    return mex;
+}
+
+int handler_M3_INFORM_SERVER_GAME_END(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance){
+    //Format mex |op|len|EKas(NONCE_SERVER)
+
+    //get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+    
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    if(plaintext == NULL){printf("Error in decryption symmetric ciphertext M3_INFORM_SERVER_GAME_END\nAbort\n");return 0;}
+    //extract and verify info in plaintext
+    if(get_and_verify_info_M3_INFORM_SERVER_GAME_END(plaintext,authInstance) == false){
+        printf("Not consistent info received in M3_INFORM_SERVER_GAME_END\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M3_INFORM_SERVER_GAME_END(unsigned char * plaintext,AuthenticationInstance* authInstance){
+    //Call on server side
+
+    //declare buffer (NONCE_SERVER)
+    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
+
+    int pt_byte_index = 0;
+
+    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]) ,NONCE_32);
+    pt_byte_index += NONCE_32;
+
+    if(authInstance->expected_opcode < SUCCESSFUL_CLIENT_SERVER_AUTH){printf("Received M3_INFORM_SERVER_GAME_END but not yet authenticated client\n");return false;}
+    if(memcmp(authInstance->nonce_server,nonce_server_rec,NONCE_32)!=0){printf("Mismatch nonce_server in M3_INFORM_SERVER_GAME_END\n");return false;}
+
+    free(nonce_server_rec);
     return true;
 }
 

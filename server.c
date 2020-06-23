@@ -185,7 +185,7 @@ void *thread_handler_client(void *ptr) {
     //long addr = 0;
     struct sockaddr_in user_address;
 
-    char* command = (char*)malloc(COMMAND_SIZE);
+    //char* command = (char*)malloc(COMMAND_SIZE);
     
     //Just to test
     bool result;
@@ -502,31 +502,79 @@ void *thread_handler_client(void *ptr) {
             break;
 
 
-            case M_INFORM_SERVER_GAME_START:
-                //received M_INFORM_SERVER_GAME_START
+            case M1_INFORM_SERVER_GAME_START:
+                //received M1_INFORM_SERVER_GAME_START
                 //check if expected or not TODO!!!!!!
                 if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
-                    printf("[Self-said %s]Unexpected M_INFORM_SERVER_GAME_START since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
+                    printf("[Self-said %s]Unexpected M1_INFORM_SERVER_GAME_START since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_INFORM_SERVER_GAME_START\n",guest_nickname);
+                printf("[%s]: Received M1_INFORM_SERVER_GAME_START\n",guest_nickname);
                 
-                if( handler_M_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                if( handler_M1_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
             
-                printf("[%s]: M_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+                printf("[%s]: M1_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+
+                mex_to_send = create_M2_INFORM_SERVER_GAME_START(authenticationInstance);
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[%s]: M2_INFORM_SERVER_GAME_START sent\n",authenticationInstance->nickname_client);
+                    //free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_START\nAbort\n",authenticationInstance->nickname_client);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+            
+                read_MESSAGE(conn->sock,mex_received);
+                if(mex_received->opcode != M3_INFORM_SERVER_GAME_START){
+                    printf("[%s]:Expected M3_INFORM_SERVER_GAME_START but another mex arrived\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                if( handler_M3_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: M3_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
                 printf("[%s]: The client has started a game. we've to wait till the end\n",guest_nickname);
 
                 do{
                     read_MESSAGE(conn->sock,mex_received);
-                }while((mex_received->opcode != M_INFORM_SERVER_GAME_END) || (handler_M_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1));
+                }while((mex_received->opcode != M1_INFORM_SERVER_GAME_END) || (handler_M1_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1));
 
-                printf("[%s]:Received M_INFORM_SERVER_GAME_END\n",guest_nickname);
-                printf("[%s]: M_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
+                printf("[%s]:Received M1_INFORM_SERVER_GAME_END\n",guest_nickname);
+/*
+        printf("[%s]: M2_INFORM_SERVER_GAME_END before\n",authenticationInstance->nickname_client);
+                mex_to_send = create_M2_INFORM_SERVER_GAME_END(authenticationInstance);
+        printf("[%s]: M2_INFORM_SERVER_GAME_END created\n",authenticationInstance->nickname_client);
         
+                if(send_MESSAGE(conn->sock,mex_to_send)){
+                    printf("[%s]: M2_INFORM_SERVER_GAME_END sent\n",authenticationInstance->nickname_client);
+                    //free_MESSAGE(&mex_to_send);
+                }else{
+                    printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_END\nAbort\n",authenticationInstance->nickname_client);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+printf("[%s]: M3_INFORM_SERVER_GAME_END before\n",authenticationInstance->nickname_client);
+                read_MESSAGE(conn->sock,mex_received);
+printf("[%s]: M3_INFORM_SERVER_GAME_END received\n",authenticationInstance->nickname_client);
+                if(mex_received->opcode != M3_INFORM_SERVER_GAME_END){
+                    printf("[%s]:Expected M3_INFORM_SERVER_GAME_END but another mex arrived\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+printf("[%s]: M3_INFORM_SERVER_GAME_END rec 2\n",authenticationInstance->nickname_client);
+                if( handler_M3_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                printf("[%s]: M3_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
+ */       
                 //in the meanwhile the server is waiting for the end of game OPCODE
                 printf("[%s]: The client has notified the end of the game\n",guest_nickname);
                 //reset the info in list_user (accepted = false; adversary_nickname = "")
@@ -552,8 +600,15 @@ closing_sock:
     pthread_mutex_unlock(&mutex_list_users);
     
     /* close socket and clean up */
-    strcpy(command,"closing");
-    write(conn->sock, &command, strlen(command));
+    mex_to_send = create_M_CLOSE(authenticationInstance);
+    if(send_MESSAGE(conn->sock,mex_to_send)){
+        printf("[%s]: M_CLOSE sent\n",authenticationInstance->nickname_client);
+        //free_MESSAGE(&mex_to_send);
+    }else{
+        printf("[%s]: Unable to create M_CLOSE\nAbort\n",authenticationInstance->nickname_client);
+        free(authenticationInstance);
+        goto closing_sock;
+    }
     close(conn->sock);
     free(conn);
     pthread_exit(0);
