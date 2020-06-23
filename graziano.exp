@@ -1,0 +1,12 @@
+#!/usr/bin/env expect
+spawn ./client 20300
+#expect "> "
+send "server\n"
+send "graziano\n"
+send "graziano\n"
+send "127.0.0.1\n"
+send "20100\n"
+send "play\n"
+send "silvano\n"
+# turn it back over to interactive user
+interact

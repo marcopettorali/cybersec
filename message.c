@@ -1857,10 +1857,17 @@ bool get_and_verify_info_M1_INFORM_SERVER_GAME_END(unsigned char * plaintext,Aut
 Message* create_M2_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance){
     //Mex format |op|len|EKas(NONCE_CLIENT NONCE_SERVER)| //otherwise replay attack
     unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
+    if(nonce==NULL)
+        printf("[%s]:nonce null! MALLOC ERROR\n",authInstance->nickname_client);
+    else
+        printf("[%s]:nonce created!\n",authInstance->nickname_client);
     int byte_index = 0;
     //create returning mex
     Message *mex = (Message *)malloc (sizeof (Message));
- 
+    if(mex==NULL)
+        printf("[%s]:mex null! MALLOC ERROR\n",authInstance->nickname_client);
+    else
+        printf("[%s]:mex created!\n",authInstance->nickname_client);
     mex->opcode = M2_INFORM_SERVER_GAME_END;
 
     //Start creating plaintext |NONCE_CLIENT NONCE_SERVER|
@@ -1870,26 +1877,36 @@ Message* create_M2_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance)
     memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_client, NONCE_32);
     pt_byte_index += NONCE_32;
     
+    printf("[%s]:memcopy 1!\n",authInstance->nickname_client);
+
     generate_nonce(&nonce,NONCE_32);
 
     memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
     pt_byte_index += NONCE_32;
+
+    printf("[%s]:memcopy 2!\n",authInstance->nickname_client);
 
     //get ciphertext Ekas
     int ciphertext_and_info_buf_size;
     unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
     if(ciphertext_and_info_buf == NULL){ printf("Error: Unable to create ciphertext Ekas in M2_INFORM_SERVER_GAME_END\n"); return NULL; }
 
+
+    printf("[%s]:ciphertext crated!\n",authInstance->nickname_client);
     //BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     //to debug
     //BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
     
     //Allocating enough space for the payload
     mex->payload = (unsigned char *)malloc(ciphertext_and_info_buf_size);
+    if(mex->payload==NULL)
+        printf("[%s]:mex->payload null! MALLOC ERROR\n",authInstance->nickname_client);
 
     //Start creating payload |EKas(NONCE_CLIENT NONCE_SERVER)|
     memcpy(&(mex->payload[byte_index]),ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     byte_index += ciphertext_and_info_buf_size;
+
+    printf("[%s]:payload crated!\n",authInstance->nickname_client);
 
     mex->payload_len = byte_index;
 
@@ -1898,10 +1915,16 @@ Message* create_M2_INFORM_SERVER_GAME_END(AuthenticationInstance * authInstance)
     //free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
     free(ciphertext_and_info_buf);
 
+    printf("[%s]:free ciphertext_and_info_buf!\n",authInstance->nickname_client);
     //update values in authInstance
     memcpy(authInstance->nonce_server, &nonce[0], NONCE_32);
 
+    printf("[%s]:auth inst memcopy!\n",authInstance->nickname_client);
+
     free(nonce);
+
+    printf("[%s]:free nonce!\n",authInstance->nickname_client);
+
 
     return mex;
 }
