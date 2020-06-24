@@ -6,6 +6,12 @@
 #include "game_util.h"
 #include "util.h"
 
+// parameters passed by client's main
+char* player_nickname;
+char* opponent_nickname;
+unsigned char* key;
+int sock;
+
 //---- GRID UTIL ----//
 int get_element_at(int* game_grid, int row, int col) {
     if (row < 0 || row >= GRID_HEIGHT) {
@@ -58,6 +64,7 @@ int insert_checker(int* game_grid, int player, int col) {
             return 1;
         }
     }
+    return MSG_OK;
 }
 
 int cell_exists(int row, int col) {
@@ -130,7 +137,6 @@ int check_win(int* game_grid, int last_col) {
             }
             curr_row = last_row - y_vec;
             curr_col = last_col - x_vec;
-            int counter_backward = 0;
             while (cell_exists(curr_row, curr_col) && get_element_at(game_grid, curr_row, curr_col) == last_player) {
                 counter++;
                 curr_row -= y_vec;
@@ -144,7 +150,12 @@ int check_win(int* game_grid, int last_col) {
     return NO_PLAYER;
 }
 
-int main() {
+int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int slave) {
+    player_nickname = p_n;
+    opponent_nickname = o_n;
+    key = symmetric_key;
+    sock = so;
+
     int* game_grid = (int*)malloc(GRID_HEIGHT * GRID_WIDTH * sizeof(int));
     memset(game_grid, 0, GRID_HEIGHT * GRID_WIDTH * sizeof(int));
 
@@ -155,6 +166,30 @@ int main() {
     int msg = MSG_OK;
 
     int move_counter = 0;
+    if (slave == 1) {
+        printf("Waiting for the opponent's move...");
+        char player_1[NICKNAME_LENGTH];
+        char player_2[NICKNAME_LENGTH];
+        char count;
+        char column;
+        if (wait_move(&player_1[0], &player_2[0], &count, &column) != OK) {
+            return GAME_END_ERROR;
+        }
+        if (count != move_counter + 1) {
+            printf("error: move_counter = %d, count = %d\n", move_counter, count);
+            return GAME_END_ERROR;
+        }
+        move_counter = count + 1;
+        if (strcmp(&player_1[0], &opponent_nickname[0]) != 0 || strcmp(&player_2[0], &player_nickname[0]) != 0) {
+            printf("error: player1 = %s, player 2 = %s\n", player_1, player_2);
+            return GAME_END_ERROR;
+        }
+        int ret = insert_checker(game_grid, OPPONENT, column);
+        if (ret != MSG_OK) {
+            printf("error: msg = %d\n", ret);
+            return GAME_END_ERROR;
+        }
+    }
 
     while (1) {
         // print game screen
@@ -192,24 +227,26 @@ int main() {
                     char player_2[NICKNAME_LENGTH];
                     char count;
                     char column;
-                    wait_move(&player_1[0], &player_2[0], &count, &column);
+                    if (wait_move(&player_1[0], &player_2[0], &count, &column) != OK) {
+                        return GAME_END_ERROR;
+                    }
                     if (count != move_counter + 1) {
                         printf("error: move_counter = %d, count = %d\n", move_counter, count);
-                        EXCEPTION("COUNT DOESN'T MATCH", __func__);
+                        return GAME_END_ERROR;
                     }
                     move_counter = count + 1;
-                    if (strcmp(&player_1[0], &opponent_nickname) != 0 || strcmp(&player_2[0], &player_nickname) != 0) {
+                    if (strcmp(&player_1[0], &opponent_nickname[0]) != 0 || strcmp(&player_2[0], &player_nickname[0]) != 0) {
                         printf("error: player1 = %s, player 2 = %s\n", player_1, player_2);
-                        EXCEPTION("PLAYERS DOESN'T MATCH", __func__);
+                        return GAME_END_ERROR;
                     }
 
                     int ret = insert_checker(game_grid, OPPONENT, column);
                     if (ret != MSG_OK) {
                         printf("error: msg = %d\n", ret);
-                        EXCEPTION("OPPONENT CHEATED", __func__);
+                        return GAME_END_ERROR;
                     }
                     int win = check_win(game_grid, column);
-                    if (winner == OPPONENT) {
+                    if (win == OPPONENT) {
                         system("clear");
                         print_game_grid(game_grid);
                         printf("The opponent won the match\n");
@@ -228,4 +265,5 @@ int main() {
     free(game_grid);
     free(buffer);
     free(command);
+    return GAME_END_CORRECT;
 }

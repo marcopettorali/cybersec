@@ -13,8 +13,8 @@ CFLAGS  = -g -Wall -Wformat-zero-length
 # are the most commonly used names by convention
 all : client server
 
-client : client.c util.c message.c net.c crypto.c list.c
-	$(CC) $(CFLAGS) -o client client.c util.c message.c net.c crypto.c list.c -lpthread -lcrypto
+client : client.c util.c message.c net.c crypto.c list.c game.c game_net.c
+	$(CC) $(CFLAGS) -o client client.c util.c message.c net.c crypto.c list.c game.c game_net.c -lpthread -lcrypto
 
 #if server.c and/or util.c have been modified => recompile
 server : server.c util.c list.c message.c net.c pub_key_crypto.c crypto.c

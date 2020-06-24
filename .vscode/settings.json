@@ -2,6 +2,10 @@
     "files.associations": {
         "typeinfo": "cpp",
         "stdio.h": "c",
-        "in.h": "c"
+        "in.h": "c",
+        "*.tcc": "c",
+        "istream": "c",
+        "ostream": "c",
+        "functional": "cpp"
     }
 }

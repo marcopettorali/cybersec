@@ -5,8 +5,7 @@
 
 #include "util.h"
 
-int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len,
-                unsigned char *ciphertext, unsigned char *tag) {
+int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len, unsigned char *ciphertext, unsigned char *tag) {
     // create context
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
@@ -55,8 +54,7 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
     return ciphertext_len;
 }
 
-int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aad, int aad_len, unsigned char *tag, unsigned char *key,
-                unsigned char *iv, int iv_len, unsigned char *plaintext) {
+int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aad, int aad_len, unsigned char *tag, unsigned char *key, unsigned char *iv, int iv_len, unsigned char *plaintext) {
     int ret;
 
     // create context
@@ -109,8 +107,8 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     }
 }
 
-unsigned char * prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char* shared_key, int* ciphertext_len) {
-    //buffer to return
+unsigned char *prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char *shared_key, int *ciphertext_len) {
+    // buffer to return
     unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
     *ciphertext_len = GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
 
@@ -125,8 +123,7 @@ unsigned char * prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_l
     // initialize index in the ciphertext
     int ct_index = 0;
 
-    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE],
-                tag);
+    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag);
 
     memcpy(&ciphertext[ct_index], iv, GCM_IV_SIZE);
     ct_index += GCM_IV_SIZE;
@@ -137,13 +134,12 @@ unsigned char * prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_l
     memcpy(&ciphertext[ct_index], tag, GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
 
-    //MARCO: changed return
     return ciphertext;
 }
 
-unsigned char* extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char* shared_key, int* plaintext_len) {
-    //Buffer to return
-    unsigned char* plaintext = (unsigned char *)malloc(ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE));
+unsigned char *extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char *shared_key, int *plaintext_len) {
+    // Buffer to return
+    unsigned char *plaintext = (unsigned char *)malloc(ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE));
     *plaintext_len = ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE);
 
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
@@ -162,22 +158,20 @@ unsigned char* extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_
     memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
 
-    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
-                &iv[0], GCM_IV_SIZE, &plaintext[0]);
+    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE, &plaintext[0]);
 
-    //MARCO: changed return
     return plaintext;
 }
 /* TO BE MOVED HERE
 void generate_symmetric_key(unsigned char **key,unsigned long key_len){
-	RAND_poll();
-	int rc = RAND_bytes(*key, key_len);
-	//unsigned long err = ERR_get_error();
+        RAND_poll();
+        int rc = RAND_bytes(*key, key_len);
+        //unsigned long err = ERR_get_error();
 
-	if(rc != 1) {
-		printf("Error in generating key\n");
-		exit(1);
-	}
+        if(rc != 1) {
+                printf("Error in generating key\n");
+                exit(1);
+        }
 }*/
 /*
 int main() {
@@ -186,13 +180,13 @@ int main() {
     unsigned char *pt = "BELLARAGA!!!!";
     unsigned char* shared_key = (unsigned char*)malloc(18);
     memcpy(&shared_key[0], "abcdefghilmnopqrs", 18);
-    
+
     unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
     prepare_gcm_ciphertext(&pt[0], strlen(pt), &ciphertext[0], &shared_key[0]);
 
     unsigned char *received_pt = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
     extract_gcm_ciphertext(&ciphertext[0], GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt), &received_pt[0], &shared_key[0]);
-    
+
     printf("plaintext = %s.\n", received_pt);
     return 0;
 }*/
