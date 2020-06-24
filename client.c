@@ -48,7 +48,6 @@ void *thread_handler_gaming(void *ptr) {
         free_MESSAGE(&mex);
         while (1) {
             read_MESSAGE(infoToPlay->connection->sock, received_msg);
-            read_MESSAGE_payload(infoToPlay->connection->sock, received_msg);
             switch (received_msg->opcode) {
                 case M2_CLIENT_CLIENT_AUTH:
                     if ((infoToPlay->authenticationInstanceToPlay == NULL) || (infoToPlay->authenticationInstanceToPlay->expected_opcode != M2_CLIENT_CLIENT_AUTH)) {
@@ -59,7 +58,7 @@ void *thread_handler_gaming(void *ptr) {
                                                       infoToPlay->authenticationInstanceToPlay->local_priv_key) != 1) {
                         goto closing_sock;
                     }
-
+					printf("M2_CLIENT_CLIENT_AUTH correctly handled\n");
                     mex = create_M3_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
                     if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M3_CLIENT_CLIENT_AUTH sent\n");
                     free_MESSAGE(&mex);
@@ -88,11 +87,10 @@ void *thread_handler_gaming(void *ptr) {
     } else {
         printf("I'm the slave\n");
         Message *received_msg = (Message *)malloc(sizeof(Message));
-
+		infoToPlay->authenticationInstanceToPlay->expected_opcode = M1_CLIENT_CLIENT_AUTH;
+		
         while (1) {
             read_MESSAGE(infoToPlay->connection->sock, received_msg);
-            read_MESSAGE_payload(infoToPlay->connection->sock, received_msg);
-            infoToPlay->authenticationInstanceToPlay->expected_opcode = M1_CLIENT_CLIENT_AUTH;
             switch (received_msg->opcode) {
                 case M1_CLIENT_CLIENT_AUTH:
                     if ((infoToPlay->authenticationInstanceToPlay == NULL) || (infoToPlay->authenticationInstanceToPlay->expected_opcode != M1_CLIENT_CLIENT_AUTH)) {
@@ -102,7 +100,7 @@ void *thread_handler_gaming(void *ptr) {
                     if (handler_M1_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) != 1) {
                         goto closing_sock;
                     }
-
+					printf("M1_CLIENT_CLIENT_AUTH correctly handled\n");
                     mex = create_M2_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
                     if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M2_CLIENT_CLIENT_AUTH sent\n");
                     free_MESSAGE(&mex);

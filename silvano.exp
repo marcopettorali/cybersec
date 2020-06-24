@@ -6,8 +6,8 @@ send "silvano\n"
 send "silvano\n"
 send "127.0.0.1\n"
 send "20100\n"
-expect "Do you want to accept?\n"
-sleep 4
-send "1\n"
+# expect "Do you want to accept?\n"
+# sleep 4
+# send "1\n"
 # turn it back over to interactive user
 interact

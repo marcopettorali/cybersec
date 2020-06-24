@@ -2739,11 +2739,11 @@ bool client_authentication(char* username_client, EVP_PKEY** p_prvkey) {
 
 bool send_MESSAGE(int sock, Message* mex) {
     if (mex == NULL) return false;
-    unsigned char* buffer_to_send = (unsigned char*)malloc(mex->payload_len);
+    unsigned char* buffer_to_send = (unsigned char*)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + mex->payload_len);
     int byte_to_send = add_header(buffer_to_send, mex->opcode, mex->payload_len, mex->payload);
     int byte_correctly_sent = send(sock, buffer_to_send, byte_to_send, 0);
     // BIO_dump_fp(stdout, (const char *)buffer_to_send, byte_to_send);
-    // free(buffer_to_send);
+    free(buffer_to_send);
     return byte_correctly_sent == byte_to_send ? true : false;
 }
 
@@ -2806,7 +2806,7 @@ int handler_M1_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
     // Format mex |121|len|ID_LOCAL ID_OPPONENT NONCEa|
 
     if (get_and_verify_info_M1_CLIENT_CLIENT_AUTH(payload, authInstance) == false) {
-        printf("Not consistent info received in M1 auth protocol\nAbort\n");
+        printf("Not consistent info received in M1_CLIENT_CLIENT_AUTH auth protocol\nAbort\n");
         return 0;
     }
 
@@ -2814,7 +2814,7 @@ int handler_M1_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
 }
 
 bool get_and_verify_info_M1_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
-    // initialize index in the payload
+    // initialize index in the payload |ID_LOCAL ID_OPPONENT NONCEa|
     int pd_index = 0;
 
     char* msg_sender_nickname = (char*)malloc(NICKNAME_LENGTH);
@@ -2829,12 +2829,12 @@ bool get_and_verify_info_M1_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
     printf("Request of authentication from client: %s\n", msg_sender_nickname);
     printf("To %s\n", msg_receiver_nickname);
 
-    if (strncmp(authInstance->nickname_local, msg_receiver_nickname, sizeof(NICKNAME_SERVER)) != 0) {
+    if (strncmp(authInstance->nickname_local, msg_receiver_nickname, NICKNAME_LENGTH) != 0) {
         printf("Wrong destination: abort\n");
         return false;
     }
 
-    if (strncmp(authInstance->nickname_local, msg_sender_nickname, sizeof(NICKNAME_SERVER)) != 0) {
+    if (strncmp(authInstance->nickname_opponent, msg_sender_nickname, NICKNAME_LENGTH) != 0) {
         printf("Wrong source: abort\n");
         return false;
     }
@@ -2903,7 +2903,7 @@ Message* create_M2_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
     free(ciphertext_and_info_buf);
 
     // update values in authInstance
-    authInstance->expected_opcode = (char)M3_CLIENT_CLIENT_AUTH;
+    authInstance->expected_opcode = M3_CLIENT_CLIENT_AUTH;
 
     return mex;
 }
@@ -3083,8 +3083,8 @@ bool get_and_verify_info_M3_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
     memcpy(sender_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(receiver_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
-    pt_byte_index += sizeof(NICKNAME_SERVER);
+    memcpy(receiver_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
 
     memcpy(challenge_to_master_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
     pt_byte_index += CHALLENGE_32;
