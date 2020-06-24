@@ -547,11 +547,9 @@ void *thread_handler_client(void *ptr) {
                 }while((mex_received->opcode != M1_INFORM_SERVER_GAME_END) || (handler_M1_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1));
 
                 printf("[%s]:Received M1_INFORM_SERVER_GAME_END\n",guest_nickname);
-/*
-        printf("[%s]: M2_INFORM_SERVER_GAME_END before\n",authenticationInstance->nickname_client);
+
                 mex_to_send = create_M2_INFORM_SERVER_GAME_END(authenticationInstance);
-        printf("[%s]: M2_INFORM_SERVER_GAME_END created\n",authenticationInstance->nickname_client);
-        
+                
                 if(send_MESSAGE(conn->sock,mex_to_send)){
                     printf("[%s]: M2_INFORM_SERVER_GAME_END sent\n",authenticationInstance->nickname_client);
                     //free_MESSAGE(&mex_to_send);
@@ -560,21 +558,21 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-printf("[%s]: M3_INFORM_SERVER_GAME_END before\n",authenticationInstance->nickname_client);
+
                 read_MESSAGE(conn->sock,mex_received);
-printf("[%s]: M3_INFORM_SERVER_GAME_END received\n",authenticationInstance->nickname_client);
+
                 if(mex_received->opcode != M3_INFORM_SERVER_GAME_END){
                     printf("[%s]:Expected M3_INFORM_SERVER_GAME_END but another mex arrived\nAbort\n",guest_nickname);
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-printf("[%s]: M3_INFORM_SERVER_GAME_END rec 2\n",authenticationInstance->nickname_client);
+
                 if( handler_M3_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
                 printf("[%s]: M3_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
- */       
+        
                 //in the meanwhile the server is waiting for the end of game OPCODE
                 printf("[%s]: The client has notified the end of the game\n",guest_nickname);
                 //reset the info in list_user (accepted = false; adversary_nickname = "")
