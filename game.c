@@ -7,8 +7,8 @@
 #include "util.h"
 
 // parameters passed by client's main
-char* player_nickname;
-char* opponent_nickname;
+char* player_nick;
+char* opponent_nick;
 unsigned char* key;
 int sock;
 
@@ -91,10 +91,10 @@ void print_game_grid(int* game_grid) {
             printf("| ");
             switch (get_element_at(game_grid, i, j)) {
                 case PLAYER:
-                    printf("O");
+                    printf(GREEN "O" RESET);
                     break;
                 case OPPONENT:
-                    printf("X");
+                    printf(RED "X" RESET);
                     break;
                 default:
                     printf(" ");
@@ -151,8 +151,8 @@ int check_win(int* game_grid, int last_col) {
 }
 
 int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int slave) {
-    player_nickname = p_n;
-    opponent_nickname = o_n;
+    player_nick = p_n;
+    opponent_nick = o_n;
     key = symmetric_key;
     sock = so;
 
@@ -175,12 +175,12 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
         if (wait_move(&player_1[0], &player_2[0], &count, &column) != OK) {
             return GAME_END_ERROR;
         }
-        if (count != move_counter + 1) {
+        if (count != 0) {
             printf("error: move_counter = %d, count = %d\n", move_counter, count);
             return GAME_END_ERROR;
         }
         move_counter = count + 1;
-        if (strcmp(&player_1[0], &opponent_nickname[0]) != 0 || strcmp(&player_2[0], &player_nickname[0]) != 0) {
+        if (strcmp(&player_1[0], &opponent_nick[0]) != 0 || strcmp(&player_2[0], &player_nick[0]) != 0) {
             printf("error: player1 = %s, player 2 = %s\n", player_1, player_2);
             return GAME_END_ERROR;
         }
@@ -215,7 +215,9 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
         if (strcmp(command, "insert") == 0) {
             msg = insert_checker(game_grid, PLAYER, column);
             if (msg == MSG_OK) {
-                send_move(&player_nickname[0], &opponent_nickname[0], move_counter, column);
+                system("clear");
+                print_game_grid(game_grid);
+                send_move(&player_nick[0], &opponent_nick[0], move_counter, column);
                 int winner = check_win(game_grid, column);
                 if (winner == PLAYER) {
                     system("clear");
@@ -227,6 +229,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                     char player_2[NICKNAME_LENGTH];
                     char count;
                     char column;
+                    printf("waiting for the opponent's move...\n");
                     if (wait_move(&player_1[0], &player_2[0], &count, &column) != OK) {
                         return GAME_END_ERROR;
                     }
@@ -235,7 +238,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                         return GAME_END_ERROR;
                     }
                     move_counter = count + 1;
-                    if (strcmp(&player_1[0], &opponent_nickname[0]) != 0 || strcmp(&player_2[0], &player_nickname[0]) != 0) {
+                    if (strcmp(&player_1[0], &opponent_nick[0]) != 0 || strcmp(&player_2[0], &player_nick[0]) != 0) {
                         printf("error: player1 = %s, player 2 = %s\n", player_1, player_2);
                         return GAME_END_ERROR;
                     }

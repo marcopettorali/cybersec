@@ -13,21 +13,22 @@
 #include "util.h"
 
 // parameters passed by client's main
-char* player_nickname;
-char* opponent_nickname;
+extern char* player_nick;
+extern char* opponent_nick;
 unsigned char* key;
 int sock;
 
-int prepare_move_message(unsigned char* payload, char* player_nickname, char* opponent_nickname, char count, char column) {
+int prepare_move_message(unsigned char* payload, char* player_n, char* opponent_n, char count, char column) {
+    printf("player = %s, opponent = %s, count = %d, column = %d\n", player_nick, opponent_nick, count, column);
     // initializing the index in the buffer
     int byte_index = 0;
 
     // writing this player's username
-    memcpy(&payload[byte_index], player_nickname, NICKNAME_LENGTH);
+    memcpy(&payload[byte_index], player_n, NICKNAME_LENGTH);
     byte_index += NICKNAME_LENGTH;
 
     // writing the opponent's username
-    memcpy(&payload[byte_index], opponent_nickname, NICKNAME_LENGTH);
+    memcpy(&payload[byte_index], opponent_n, NICKNAME_LENGTH);
     byte_index += NICKNAME_LENGTH;
 
     // writing the counter
@@ -86,30 +87,33 @@ int extract_move_message(unsigned char* payload, char* player_1_ptr, char* playe
     BIO_dump_fp(stdout, (const char*)payload, byte_index);
 }*/
 
-int send_move(char* player_nickname, char* opponent_nickname, char count, char column) {
-    printf("SEND_MOVE: player:%s, opponent:%s, shared_key=%s\n", player_nickname, opponent_nickname, shared_key);
+int send_move(char* player_n, char* opponent_n, char count, char column) {
     unsigned char* payload = (unsigned char*)malloc(MOVE_PAYLOAD_LEN);
-    prepare_move_message(&payload[0], &player_nickname[0], &opponent_nickname[0], count, column);
+    prepare_move_message(&payload[0], &player_n[0], &opponent_n[0], count, column);
     unsigned char* plaintext = (unsigned char*)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);
     add_header(&plaintext[0], OPCODE_MOVE, MOVE_PAYLOAD_LEN, &payload[0]);
     int ciphertext_len;
-    unsigned char* ciphertext = prepare_gcm_ciphertext(&plaintext[0], OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN, &shared_key[0], &ciphertext_len);
+    unsigned char* ciphertext = prepare_gcm_ciphertext(&plaintext[0], OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN, &key[0], &ciphertext_len);
     int byte_correctly_sent = send(sock, &ciphertext[0], ciphertext_len, 0);
+    printf("Sent move: player = %s, opponent = %s , count = %d, column = %d\n", player_n, opponent_n, count, column);
     return byte_correctly_sent == ciphertext_len ? 1 : 0;
 }
 
 int wait_move(char* player_n, char* opponent_n, char* count, char* column) {
-    unsigned char* ciphertext = (unsigned char*)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);
+    int wait_move_packet_size = GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN;
+    unsigned char* ciphertext = (unsigned char*)malloc(wait_move_packet_size);
 
-    int read_byte = read(sock, &ciphertext[0], GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);
+    int read_byte = read(sock, &ciphertext[0], wait_move_packet_size);
 
-    if (read_byte != GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN) {
-        printf("error: bytes read = %d, bytes expected = %ld\n", read_byte, GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);
+    if (read_byte != wait_move_packet_size) {
+        printf("error: bytes read = %d, bytes expected = %d\n", read_byte, wait_move_packet_size);
         return ERROR;
     }
 
     int plaintext_len;
-    unsigned char* plaintext = extract_gcm_ciphertext(&ciphertext[0], GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN, &shared_key[0], &plaintext_len);
+    unsigned char* plaintext = extract_gcm_ciphertext(&ciphertext[0], wait_move_packet_size, &key[0], &plaintext_len);
+
+    free(ciphertext);
 
     char opcode;
     int payload_len;
@@ -127,28 +131,9 @@ int wait_move(char* player_n, char* opponent_n, char* count, char* column) {
         return ERROR;
     }
 
-    extract_move_message(&payload[0], &player_nickname[0], &opponent_nickname[0], count, column);
+    extract_move_message(&payload[0], &player_n[0], &opponent_n[0], count, column);
+
+    printf("Received move: player = %s, opponent = %s , count = %d, column = %d\n", player_n, opponent_n, *count, *column);
+
     return OK;
 }
-
-/*int main() {
-    unsigned char* payload = (unsigned char*)malloc(MOVE_PAYLOAD_LEN);
-    char gino_str[NICKNAME_LENGTH];
-    char pino_str[NICKNAME_LENGTH];
-
-    strncpy(gino_str, "Gino", NICKNAME_LENGTH);
-    strncpy(pino_str, "Pino", NICKNAME_LENGTH);
-
-    prepare_move_message(payload, &gino_str[0], &pino_str[0], 2, 4);
-    //print_move_message(payload);
-
-    unsigned char* buffer = (unsigned char*)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);
-    add_header(&buffer[0], OPCODE_MOVE, MOVE_PAYLOAD_LEN, &payload[0]);
-
-    char opcode;
-    int payload_len;
-    unsigned char* payload_rcv = (unsigned char*)malloc(MOVE_PAYLOAD_LEN);
-    extract_header(&buffer[0], &opcode, &payload_len, &payload_rcv[0]);
-    print_header(&buffer[0]);
-    print_move_message(&payload_rcv[0]);
-}*/

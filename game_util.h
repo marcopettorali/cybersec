@@ -10,8 +10,8 @@
 #define GAME_END_ERROR 0
 
 // parameters passed by client's main
-extern char* player_nickname;
-extern char* opponent_nickname;
+extern char* player_nick;
+extern char* opponent_nick;
 extern unsigned char* key;
 extern int sock;
 
