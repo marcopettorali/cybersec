@@ -43,3 +43,15 @@ void EXCEPTION(char* msg, const char* function) {
     printf("[EXCEPTION] In function %s(): %s\n", function, msg);
     exit(EXIT_FAILURE);
 }
+
+void alert(char* msg) {
+    printf("\033[0;31m");
+    printf("%s\n", msg);
+    printf("\033[0m");
+}
+
+void safe(char* msg) {
+    printf("\033[0;32m");
+    printf("%s\n", msg);
+    printf("\033[0m");
+}

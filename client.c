@@ -46,7 +46,7 @@ void *thread_handler_gaming(void *ptr) {
         mex = create_M1_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
         if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M1_CLIENT_CLIENT_AUTH sent\n");
         free_MESSAGE(&mex);
-        while (1) {
+        /*while (1) {
             read_MESSAGE(infoToPlay->connection->sock, received_msg);
             switch (received_msg->opcode) {
                 case M2_CLIENT_CLIENT_AUTH:
@@ -83,12 +83,12 @@ void *thread_handler_gaming(void *ptr) {
                     goto closing_sock;
                     break;
             }
-        }
+        }*/
     } else {
         printf("I'm the slave\n");
         Message *received_msg = (Message *)malloc(sizeof(Message));
 		infoToPlay->authenticationInstanceToPlay->expected_opcode = M1_CLIENT_CLIENT_AUTH;
-		
+		/*
         while (1) {
             read_MESSAGE(infoToPlay->connection->sock, received_msg);
             switch (received_msg->opcode) {
@@ -133,7 +133,7 @@ void *thread_handler_gaming(void *ptr) {
                     goto closing_sock;
                     break;
             }
-        }
+        }*/
     }
     sleep(7);
 
@@ -166,7 +166,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	if(client_authentication(username_client,&prvkey)==false){
         exit(1);
     }else{
-        printf("**Successful authentication**\n");
+        printf( GREEN "**Successful authentication**\n" RESET);
     }
 	//**START CONNECTING TO SERVER SOCKET**	
 	do {
@@ -245,8 +245,8 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	//handling authentication client_client to play
     AuthenticationInstanceToPlay *authenticationInstanceToPlay;
 
-	printf("**Establishing secure connection**\n");
-	
+	printf( RED "**Establishing secure connection**\n" RESET);
+
 	Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client,authenticationInstance);
 	if(send_MESSAGE(sock,mex))
 		printf("M1 sent\n");
@@ -301,7 +301,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 	
 	printf("M4_CLIENT_SERVER_AUTH handled correctly\n");
 
-	printf("**Secure connection established**\n");
+	printf( GREEN "**Secure connection established**\n" RESET);
 	//**END AUTHENTICATION AND KEY ESTABLISHMENT
 
 
@@ -540,9 +540,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 							infoToPlay->authenticationInstanceToPlay = authenticationInstanceToPlay;
 
 							pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
-							pthread_join(thread_to_play,NULL);
-
-							free(infoToPlay);
+							pthread_join(thread_to_play,NULL);			
 
 							printf("Game ended: inform the server about it\n");
 
@@ -551,7 +549,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 							if(send_MESSAGE(sock,mex))
 								printf("M1_INFORM_SERVER_GAME_END sent\n");
 							free_MESSAGE(&mex);
-/*
+
 							//wait for M2_INFORM_SERVER_GAME_END
 							read_MESSAGE(sock,mex_received);
 							if( (mex_received->opcode!=M2_INFORM_SERVER_GAME_END) || (handler_M2_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1)){
@@ -570,7 +568,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 							if(send_MESSAGE(sock,mex))
 								printf("M3_INFORM_SERVER_GAME_END sent\n");
 							free_MESSAGE(&mex);
-*/
+
 							free(connection_to_play);
 							close(sock_to_play_master); //since each time he's the master, he will instantiate another sock
 							
@@ -714,8 +712,6 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 
 						pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
 						pthread_join(thread_to_play,NULL);
-						
-						free(infoToPlay);
 
 						printf("Game ended: inform the server about it\n");
 
@@ -723,7 +719,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 						if(send_MESSAGE(sock,mex))
 								printf("M1_INFORM_SERVER_GAME_END sent\n");
 						free_MESSAGE(&mex);
-/*
+
 						//wait for M2_INFORM_SERVER_GAME_END
 						read_MESSAGE(sock,mex_received);
 						if( (mex_received->opcode!=M2_INFORM_SERVER_GAME_END) || (handler_M2_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1)){
@@ -742,7 +738,7 @@ void handling_connection_to_server(char* buffer, char* command,int port_p2p){
 						if(send_MESSAGE(sock,mex))
 							printf("M3_INFORM_SERVER_GAME_END sent\n");
 						free_MESSAGE(&mex);
-*/					
+					
 					}else{
 						printf("Oh dear, something went wrong with accept()! %s\n", strerror(errno));
 					}
