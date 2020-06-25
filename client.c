@@ -318,7 +318,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
 
     while (1) {
         msg = MSG_OK;
-        printf("> ");
+        printf(BLUE "> " RESET);
         fflush(stdout);  // To force flushing the stdout without inserting \n
         // We'll use a select to be aware if the server has sent something or the user has inserted something (Refer to Vallati's notes)
         fd_set read_fds;
@@ -766,7 +766,7 @@ int main(int argc, char **argv) {
             handle_msg(msg);
             msg = MSG_OK;
         }
-        printf("> ");
+        printf(BLUE "> " RESET);
 
         // clear buffers for storing commands
         memset(buffer, 0, COMMAND_SIZE);

@@ -659,7 +659,7 @@ int main(int argc, char **argv) {
     if(server_authentication(&prvkey)==false){
         exit(1);
     }else{
-        printf("**Successfull authentication**\n");
+        printf(GREEN "**Successfull authentication**\n" RESET);
     }
 
 

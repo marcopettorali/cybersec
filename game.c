@@ -222,7 +222,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                 if (winner == PLAYER) {
                     system("clear");
                     print_game_grid(game_grid);
-                    printf("YOU WIN!\n");
+                    printf(YELLOW "YOU WIN!\n" RESET);
                     break;
                 } else {
                     char player_1[NICKNAME_LENGTH];
@@ -252,7 +252,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                     if (win == OPPONENT) {
                         system("clear");
                         print_game_grid(game_grid);
-                        printf("The opponent won the match\n");
+                        printf( MAGENTA "The opponent won the match\n" RESET);
                         break;
                     }
                 }
