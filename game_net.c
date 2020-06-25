@@ -87,6 +87,7 @@ int extract_move_message(unsigned char* payload, char* player_1_ptr, char* playe
 }*/
 
 int send_move(char* player_nickname, char* opponent_nickname, char count, char column) {
+    printf("SEND_MOVE: player:%s, opponent:%s, shared_key=%s\n", player_nickname, opponent_nickname, shared_key);
     unsigned char* payload = (unsigned char*)malloc(MOVE_PAYLOAD_LEN);
     prepare_move_message(&payload[0], &player_nickname[0], &opponent_nickname[0], count, column);
     unsigned char* plaintext = (unsigned char*)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + MOVE_PAYLOAD_LEN);

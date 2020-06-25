@@ -1,0 +1,7 @@
+FEDE - Rimuovere campo NONCE_SERVER in messaggio M_RES_PLAY_OPPONENT
+? Rimuovere campo ID_OPPONENT in messaggi M_REQ_PLAY e M_RES_PLAY_TO_ACK
+- Gestire utente che può rifiutare trustServer
+FEDE - Gestire client: cosa succede quando il server fa un abort? (Gestire closing del socket)
+MARCO - ! Risolvere bug free after send
+FEDE - ! Gestire CLIENT_NONCE SERVER_NONCE in INFORM_GAME_START (_END)
+? Sostituire handler specifiche comuni con una sola handler generale
