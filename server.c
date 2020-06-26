@@ -297,10 +297,14 @@ void *thread_handler_client(void *ptr) {
                 //send M2
                 mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[Self-said %s]: M2_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    #if defined DEBUG_LEVEL
+                        printf("[Self-said %s]: M2_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
-                    printf("[Self-said %s]: Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
+                    #if defined DEBUG_LEVEL
+                        printf("[Self-said %s]: Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
+                    #endif
                     free(authenticationInstance);
                     goto closing_sock;
                 }
@@ -319,8 +323,9 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-
-                printf("[Self-said %s]: M3_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
+                #if defined DEBUG_LEVEL
+                    printf("[Self-said %s]: M3_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
+                #endif
                 //send M4
                 mex_to_send = create_M4_CLIENT_SERVER_AUTH(authenticationInstance);   
                 if(send_MESSAGE(conn->sock,mex_to_send)){
@@ -631,6 +636,7 @@ int main(int argc, char **argv) {
         return -2;
     }
 
+
     /* create socket */
     sock_main_thread = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_main_thread <= 0) {
@@ -652,8 +658,16 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s: error: cannot listen on port\n", argv[0]);
         return -5;
     }
+
+    #if defined DEBUG_LEVEL
+        printf( CYAN "DEBUG: ENABLED\n"  RESET);
+    #else
+        printf( CYAN "DEBUG: DISABLED\n"  RESET);
+    #endif
+
+
     // listen return 0 if ok
-    printf("%s: ready and listening\n", argv[0]);
+    printf("[Main thread]: socket ready and listening\n");
 
     //**Authentication of server** (retrieve privkey server)
     if(server_authentication(&prvkey)==false){
