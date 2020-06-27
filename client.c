@@ -37,14 +37,19 @@ void *thread_handler_gaming(void *ptr) {
     Message *mex;
 
     printf("[Thread handling game] : started\n");
-    printf("[Thread handling game] : ");
     printf("[Thread handling game] : Local nickname %s\n", infoToPlay->authenticationInstanceToPlay->nickname_local);
     printf("[Thread handling game] : Opponent nickname %s\n", infoToPlay->authenticationInstanceToPlay->nickname_opponent);
     if (infoToPlay->connection->master == true) {
         Message *received_msg = (Message *)malloc(sizeof(Message));
-        printf("I'm the master of the game\n");
+        #if defined VERBOSE_LEVEL
+            printf("I'm the master of the game\n");
+        #endif
         mex = create_M1_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
-        if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M1_CLIENT_CLIENT_AUTH sent\n");
+        if (send_MESSAGE(infoToPlay->connection->sock, mex)){
+            #if defined PROTOCOL_DEBUG
+                printf("M1_CLIENT_CLIENT_AUTH sent\n");
+            #endif
+        }
         free_MESSAGE(&mex);
         while (1) {
             read_MESSAGE(infoToPlay->connection->sock, received_msg);
@@ -60,9 +65,15 @@ void *thread_handler_gaming(void *ptr) {
                         printf("Unable to handle M2_CLIENT_CLIENT_AUTH correctly\nAbort\n");
                         pthread_exit(NULL);
                     }
-                    printf("M2_CLIENT_CLIENT_AUTH correctly handled\n");
+                    #if defined PROTOCOL_DEBUG
+                        printf("M2_CLIENT_CLIENT_AUTH correctly handled\n");
+                    #endif
                     mex = create_M3_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
-                    if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M3_CLIENT_CLIENT_AUTH sent\n");
+                    if (send_MESSAGE(infoToPlay->connection->sock, mex)){
+                        #if defined PROTOCOL_DEBUG
+                            printf("M3_CLIENT_CLIENT_AUTH sent\n");
+                        #endif
+                    }
                     free_MESSAGE(&mex);
                     break;
 
@@ -72,8 +83,7 @@ void *thread_handler_gaming(void *ptr) {
                         printf("Unexpected M4_CLIENT_CLIENT_AUTH\nAbort\n");
                         pthread_exit(NULL);
                     }
-                    if (handler_M4_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) !=
-                        1) {
+                    if (handler_M4_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) !=1) {
                         printf("Unable to handle M4_CLIENT_CLIENT_AUTH correctly\nAbort\n");
                         pthread_exit(NULL);
                     }
@@ -92,7 +102,9 @@ void *thread_handler_gaming(void *ptr) {
             }
         }
     } else {
-        printf("I'm the slave\n");
+        #if defined VERBOSE_LEVEL
+            printf("I'm the slave\n");
+        #endif
         Message *received_msg = (Message *)malloc(sizeof(Message));
         infoToPlay->authenticationInstanceToPlay->expected_opcode = M1_CLIENT_CLIENT_AUTH;
 
@@ -105,14 +117,19 @@ void *thread_handler_gaming(void *ptr) {
                         printf("Unexpected M1_CLIENT_CLIENT_AUTH\nAbort\n");
                         pthread_exit(NULL);
                     }
-                    if (handler_M1_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) !=
-                        1) {
+                    if (handler_M1_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) !=1) {
                         printf("Unable to handle M1_CLIENT_CLIENT_AUTH correctly\nAbort\n");
                         pthread_exit(NULL);
                     }
-                    printf("M1_CLIENT_CLIENT_AUTH correctly handled\n");
+                    #if defined PROTOCOL_DEBUG
+                        printf("M1_CLIENT_CLIENT_AUTH correctly handled\n");
+                    #endif
                     mex = create_M2_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
-                    if (send_MESSAGE(infoToPlay->connection->sock, mex)) printf("M2_CLIENT_CLIENT_AUTH sent\n");
+                    if (send_MESSAGE(infoToPlay->connection->sock, mex)){
+                        #if defined PROTOCOL_DEBUG
+                            printf("M2_CLIENT_CLIENT_AUTH sent\n");
+                        #endif
+                    }
                     free_MESSAGE(&mex);
                     break;
                 case M3_CLIENT_CLIENT_AUTH:
@@ -128,7 +145,9 @@ void *thread_handler_gaming(void *ptr) {
                     }
                     mex = create_M4_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
                     if (send_MESSAGE(infoToPlay->connection->sock, mex)) {
-                        printf("M4_CLIENT_CLIENT_AUTH sent\n");
+                        #if defined PROTOCOL_DEBUG
+                            printf("M4_CLIENT_CLIENT_AUTH sent\n");
+                        #endif
                         free_MESSAGE(&mex);
                     } else {
                         printf("Unable to create M4_CLIENT_CLIENT_AUTH\nAbort\n");
@@ -239,9 +258,10 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         return;
     }
     // listen return 0 if ok
-    printf("Sock to play is ready and listening\n");
-
-    printf("Socket connected to server\n");
+    #if defined VERBOSE_LEVEL
+        printf("Sock to play is ready and listening\n");
+        printf("Socket connected to server\n");
+    #endif
     //**END CONNECTING TO SERVER SOCKET**
 
     //**START AUTHENTICATION AND KEY ESTABLISHMENT**
@@ -253,10 +273,15 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
     // handling authentication client_client to play
     AuthenticationInstanceToPlay *authenticationInstanceToPlay;
 
-    printf(RED "**Establishing secure connection**\n" RESET);
-
+    #if defined PROTOCOL_DEBUG
+        printf(RED "**Establishing secure connection**\n" RESET);
+    #endif
     Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client, authenticationInstance);
-    if (send_MESSAGE(sock, mex)) printf("M1 sent\n");
+    if (send_MESSAGE(sock, mex)){
+        #if defined PROTOCOL_DEBUG
+            printf("M1 sent\n");
+        #endif
+    }
     free_MESSAGE(&mex);
 
     // Waiting for M2_CLIENT_SERVER_AUTH
@@ -278,10 +303,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         return;
     }
 
-    printf("M2_CLIENT_SERVER_AUTH handled correctly\n");
+    #if defined PROTOCOL_DEBUG
+        printf("M2_CLIENT_SERVER_AUTH handled correctly\n");
+    #endif
 
     mex = create_M3_CLIENT_SERVER_AUTH(authenticationInstance);
-    if (send_MESSAGE(sock, mex)) printf("M3_CLIENT_SERVER_AUTH sent\n");
+    if (send_MESSAGE(sock, mex)){
+        #if defined PROTOCOL_DEBUG
+            printf("M3_CLIENT_SERVER_AUTH sent\n");
+        #endif
+    }
     free_MESSAGE(&mex);
 
     // Waiting for M4_CLIENT_SERVER_AUTH
@@ -302,15 +333,20 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         close(sock_to_play);
         return;
     }
+    #if defined PROTOCOL_DEBUG
+        printf("M4_CLIENT_SERVER_AUTH handled correctly\n");
+    #endif
+        printf(GREEN "**Secure connection established**\n" RESET);
 
-    printf("M4_CLIENT_SERVER_AUTH handled correctly\n");
-
-    printf(GREEN "**Secure connection established**\n" RESET);
     //**END AUTHENTICATION AND KEY ESTABLISHMENT
 
     // Tell him on which port I will listen for p2p port (since we cannot listen on the same port of other local players)
     mex = create_M_LISTEN_PORT_CLIENT_P2P(port_p2p, authenticationInstance);
-    if (send_MESSAGE(sock, mex)) printf("M_LISTEN_PORT_CLIENT_P2P sent\n");
+    if (send_MESSAGE(sock, mex)){
+        #if defined PROTOCOL_DEBUG
+            printf("M_LISTEN_PORT_CLIENT_P2P sent\n");
+        #endif
+    }
     free_MESSAGE(&mex);
 
     authenticationInstance->expected_opcode =
@@ -350,7 +386,11 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
 
                     if (strcmp(command, "list") == 0) {
                         mex = create_M_REQ_LIST(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M_REQ_LIST sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_REQ_LIST sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         // Waiting for M_RES_LIST
@@ -372,8 +412,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             close(sock_to_play);
                             return;
                         }
-
-                        printf("M_RES_LIST handled correctly\n");
+                        #if defined PROTOCOL_DEBUG
+                            printf("M_RES_LIST handled correctly\n");
+                        #endif
                         // print list
                         if (mex_received->payload_len == 1) {
                             printf("Nobody is available.. please retry after a while\n");
@@ -393,7 +434,11 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         username_opponent[NICKNAME_LENGTH - 1] = '\0';
 
                         mex = create_M_REQ_PLAY(username_opponent, authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M_REQ_PLAY sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_REQ_PLAY sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         // Waiting for M_RES_PLAY_TO_ACK
@@ -415,10 +460,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             return;
                         }
 
-                        printf("M_RES_PLAY_TO_ACK handled correctly\n");
+                        #if defined PROTOCOL_DEBUG
+                            printf("M_RES_PLAY_TO_ACK handled correctly\n");
+                        #endif
 
                         mex = create_M_RES_PLAY_ACK(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M_RES_PLAY_ACK sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_RES_PLAY_ACK sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         // Waiting for M_RES_PLAY_OPPONENT
@@ -443,9 +494,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             close(sock_to_play);
                             return;
                         }
-
-                        printf("M_RES_PLAY_OPPONENT handled correctly\n");
-                        printf("Answer -> %c\tPort -> %d\n", answer, opponent_port);
+                        #if defined PROTOCOL_DEBUG
+                            printf("M_RES_PLAY_OPPONENT handled correctly\n");
+                        #endif
 
                         if ((answer != '1')) {
                             printf("The opponent has rejected\n");
@@ -453,7 +504,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             printf("He has accepted\n");
 
                             // get the parts of the opponent address_in struct (!!---we should read also the ip---!!))
-                            printf("We'll contact the opponent on %d port\n", opponent_port);
+                            #if defined VERBOSE_LEVEL
+                                printf("We'll contact the opponent on %d port\n", opponent_port);
+                            #endif
 
                             // WAIT FOR OPPONENT INFO
                             // here will received the MASTER
@@ -464,7 +517,10 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 close(sock_to_play);
                                 return;
                             }
-                            printf("Received M_PRELIMINARY_INFO_OPPONENT (master)\n");
+
+                            #if defined PROTOCOL_DEBUG
+                                printf("Received M_PRELIMINARY_INFO_OPPONENT (master)\n");
+                            #endif
 
                             authenticationInstanceToPlay = (AuthenticationInstanceToPlay *)malloc(sizeof(AuthenticationInstanceToPlay));
 
@@ -478,8 +534,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 close(sock_to_play);
                                 return;
                             }
-
-                            printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+                            #endif
                             authenticationInstanceToPlay->local_priv_key = prvkey;
 
                             // SHOULD BE PASSED to thread gaming
@@ -513,7 +570,11 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
 
                             // Inform the server that we're goign to play so its thread will wait for the end
                             mex = create_M1_INFORM_SERVER_GAME_START(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)) printf("M1_INFORM_SERVER_GAME_START sent\n");
+                            if (send_MESSAGE(sock, mex)){
+                                #if defined PROTOCOL_DEBUG
+                                    printf("M1_INFORM_SERVER_GAME_START sent\n");
+                                #endif
+                            }
                             free_MESSAGE(&mex);
 
                             // wait for M2_INFORM_SERVER_GAME_START
@@ -526,10 +587,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 close(sock_to_play);
                                 return;
                             }
-                            printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
+                            #if defined PROTOCOL_DEBUG
+                                printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
+                            #endif
 
                             mex = create_M3_INFORM_SERVER_GAME_START(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)) printf("M3_INFORM_SERVER_GAME_START sent\n");
+                            if (send_MESSAGE(sock, mex)){
+                                #if defined PROTOCOL_DEBUG
+                                    printf("M3_INFORM_SERVER_GAME_START sent\n");
+                                #endif
+                            }
                             free_MESSAGE(&mex);
 
                             InfoToPlay *infoToPlay = (InfoToPlay *)malloc(sizeof(InfoToPlay));
@@ -539,11 +606,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
                             pthread_join(thread_to_play, NULL);
 
-                            printf("Game ended: inform the server about it\n");
-
+                            #if defined VERBOSE_LEVEL
+                                printf("Game ended: inform the server about it\n");
+                            #endif
                             // to inform the server's thread that we've finished
                             mex = create_M1_INFORM_SERVER_GAME_END(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)) printf("M1_INFORM_SERVER_GAME_END sent\n");
+                            if (send_MESSAGE(sock, mex)){
+                                #if defined PROTOCOL_DEBUG
+                                    printf("M1_INFORM_SERVER_GAME_END sent\n");
+                                #endif
+                            }
                             free_MESSAGE(&mex);
 
                             // wait for M2_INFORM_SERVER_GAME_END
@@ -559,10 +631,18 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 close(sock_to_play);
                                 return;
                             }
-                            printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
+
+                            #if defined PROTOCOL_DEBUG
+                                printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
+                            #endif
 
                             mex = create_M3_INFORM_SERVER_GAME_END(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)) printf("M3_INFORM_SERVER_GAME_END sent\n");
+                            if (send_MESSAGE(sock, mex)){
+                                #if defined PROTOCOL_DEBUG
+                                    printf("M3_INFORM_SERVER_GAME_END sent\n");
+                                #endif
+                            }
+                            
                             free_MESSAGE(&mex);
 
                             free(connection_to_play);
@@ -574,7 +654,11 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         handle_msg(msg);
                     } else if (strcmp(command, "close") == 0) {
                         mex = create_M_CLOSE(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M_CLOSE sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_CLOSE sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         close(sock);
@@ -590,7 +674,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                 } else if (i == sock) {
                     // The server has sent something
                     // One cause: it wants to tell me that someone has requested to challenge me (INT CODE=3)
-                    printf("The server has sent something\n");
+                    #if defined VERBOSE_LEVEL
+                        printf("The server has sent something\n");
+                    #endif
                     // let's read it
 
                     read_MESSAGE(sock, mex_received);
@@ -604,14 +690,20 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             return;
                         }
 
-                        printf("M_REQ_ACCEPT_PLAY_TO_ACK handled correctly\n");  // for debug
+                        #if defined PROTOCOL_DEBUG
+                            printf("M_REQ_ACCEPT_PLAY_TO_ACK handled correctly\n");
+                        #endif
 
                         printf("%s has requested to challenge you\nDo you want to accept?\n", authenticationInstance->nickname_opponent_required);
                         char answer;
                         scanf(" %c", &answer);
 
                         mex = create_M_RES_ACCEPT_PLAY_ACK(answer, authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M_RES_ACCEPT_PLAY_ACK sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M_RES_ACCEPT_PLAY_ACK sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         if (answer == '1') {
@@ -619,7 +711,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             read(sock, &mex_received->opcode, OPCODE_SIZE);
                             if (mex_received->opcode == M_PRELIMINARY_INFO_OPPONENT) {
                                 // here will received the slave
+                                #if defined PROTOCOL_DEBUG
                                 printf("The server has sent the opponent's info (slave)\n");
+                                #endif
                                 read_MESSAGE_payload(sock, mex_received);
 
                                 if (handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload, mex_received->payload_len, authenticationInstance,
@@ -630,8 +724,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                     close(sock_to_play);
                                     return;
                                 }
-
-                                printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+                                #if defined PROTOCOL_DEBUG
+                                    printf("M_PRELIMINARY_INFO_OPPONENT handled correctly\n");
+                                #endif
                                 authenticationInstanceToPlay->local_priv_key = prvkey;
                             } else {
                                 printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nABORT\n");
@@ -668,11 +763,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                     // printf("connection_to_play->sock %d\n",connection_to_play->sock);
                     // check if accept has return a valid socketID
                     if (connection_to_play->sock > 0) {
-                        printf("Someone has contact us to play\n");
-
+                        #if defined VERBOSE_LEVEL
+                            printf("Someone has contact us to play\n");
+                        #endif
                         // Inform the server that we're goign to play so its thread will wait for the end
                         mex = create_M1_INFORM_SERVER_GAME_START(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M1_INFORM_SERVER_GAME_START sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M1_INFORM_SERVER_GAME_START sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         // wait for M2_INFORM_SERVER_GAME_START
@@ -688,10 +788,17 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             close(sock_to_play);
                             return;
                         }
-                        printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
+
+                        #if defined PROTOCOL_DEBUG
+                            printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
+                        #endif
 
                         mex = create_M3_INFORM_SERVER_GAME_START(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M3_INFORM_SERVER_GAME_START sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M3_INFORM_SERVER_GAME_START sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         connection_to_play->master = false;  // to state that this thread has been contected
@@ -703,10 +810,16 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         pthread_create(&thread_to_play, 0, thread_handler_gaming, (void *)infoToPlay);
                         pthread_join(thread_to_play, NULL);
 
-                        printf("Game ended: inform the server about it\n");
+                        #if defined VERBOSE_LEVEL
+                            printf("Game ended: inform the server about it\n");
+                        #endif
 
                         mex = create_M1_INFORM_SERVER_GAME_END(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M1_INFORM_SERVER_GAME_END sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M1_INFORM_SERVER_GAME_END sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                         // wait for M2_INFORM_SERVER_GAME_END
@@ -722,10 +835,17 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             close(sock_to_play);
                             return;
                         }
-                        printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
+
+                        #if defined PROTOCOL_DEBUG
+                            printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
+                        #endif
 
                         mex = create_M3_INFORM_SERVER_GAME_END(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)) printf("M3_INFORM_SERVER_GAME_END sent\n");
+                        if (send_MESSAGE(sock, mex)){
+                            #if defined PROTOCOL_DEBUG
+                                printf("M3_INFORM_SERVER_GAME_END sent\n");
+                            #endif
+                        }
                         free_MESSAGE(&mex);
 
                     } else {

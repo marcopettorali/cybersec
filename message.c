@@ -1509,7 +1509,6 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char* plaintext, Authentic
 
 Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, AuthenticationInstance* authInstance) {
     // Mex format |op|len|EKas(ID_LOCAL ID_OPPONENT length_pub_key PUBKeyOPPONENT)
-    printf("[%s]: in M_PRELIMINARY_INFO_OPPONENT\n", authInstance->nickname_client);
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
@@ -1535,7 +1534,6 @@ Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, Authenti
     memcpy(&(plaintext_buffer[pt_byte_index]), pub_key_buffer, lenght_pub_key);
     pt_byte_index += lenght_pub_key;
 
-    printf("[%s]: in M_PRELIMINARY_INFO_OPPONENT before gcm\n", authInstance->nickname_client);
     // get ciphertext Ekas
     int ciphertext_and_info_buf_size;
     unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
@@ -1543,7 +1541,6 @@ Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, Authenti
         printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
-    printf("[%s]: in M_PRELIMINARY_INFO_OPPONENT after gcm\n", authInstance->nickname_client);
 
     // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     // to debug
@@ -2353,7 +2350,9 @@ EVP_PKEY* get_and_verify_pub_key_from_certificate_CLIENT_SIDE(X509* cert_server)
     // check if correspond to local knowledge of server!
 
     //
-    printf("Certificate of \"%s\" (released by \"%s\") verified successfully\n", tmp, tmp2);
+    #if defined PROTOCOL_DEBUG
+        printf("Certificate of \"%s\" (released by \"%s\") verified successfully\n", tmp, tmp2);
+    #endif
     free(tmp);
     free(tmp2);
 
@@ -2450,11 +2449,13 @@ EVP_PKEY* get_and_verify_pub_key_from_certificate(char* nickname_client) {
     }
 
     // print the successful verification to screen:
-    char* tmp = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
-    char* tmp2 = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
-    printf("Certificate of \"%s\" (released by \"%s\") verified successfully\n", tmp, tmp2);
-    free(tmp);
-    free(tmp2);
+    #if defined PROTOCOL_DEBUG
+        char* tmp = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+        char* tmp2 = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+        printf("Certificate of \"%s\" (released by \"%s\") verified successfully\n", tmp, tmp2);
+        free(tmp);
+        free(tmp2);
+    #endif
 
     return X509_get_pubkey(cert);
 }

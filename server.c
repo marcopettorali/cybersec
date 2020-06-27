@@ -71,7 +71,9 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
         pthread_mutex_unlock(&mutex_list_users);
         return false;
     }
-    printf("[%s]: We can try to challenge\n",node_of_guest->nickname);
+    #if defined VERBOSE_LEVEL
+        printf("[%s]: We can try to challenge\n",node_of_guest->nickname);
+    #endif
     node_of_adversary->accepted=false;
     //we prepare our nick in his node
     strncpy(node_of_adversary->adversary_nickname,node_of_guest->nickname,NICKNAME_LENGTH);
@@ -80,7 +82,9 @@ bool try_to_challenge(char * adversary_nickname,struct node * node_of_guest,uint
         pthread_cond_wait(&node_of_adversary->waiting_response,&mutex_list_users);
     }
 
-    printf("[%s]: is awake\n",node_of_guest->nickname);
+    #if defined VERBOSE_LEVEL
+        printf("[%s]: is awake\n",node_of_guest->nickname);
+    #endif
 
     if(strncmp(node_of_adversary->adversary_nickname,node_of_guest->nickname,strlen(node_of_guest->nickname))==0){
         //he has accepted
@@ -102,13 +106,17 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
     pthread_mutex_lock(&mutex_list_users); //otherwise can be changed
     if((strcmp(node_of_guest->adversary_nickname,"")==0) || (node_of_guest->accepted==true)){
         pthread_mutex_unlock(&mutex_list_users);
-        printf("[%s]: Pending request? false\n",node_of_guest->nickname);
+        #if defined VERBOSE_LEVEL
+            printf("[%s]: Pending request? false\n",node_of_guest->nickname);
+        #endif
         return false;
     }
     pthread_mutex_unlock(&mutex_list_users);
-    printf("[%s]: Pending request? true\n",node_of_guest->nickname);
-    printf("[%s]: has found a request by %s\n",node_of_guest->nickname,node_of_guest->adversary_nickname);
-    printf("[%s]: I have to ask my guest if it wants to accept\n",node_of_guest->nickname);
+    #if defined VERBOSE_LEVEL
+        printf("[%s]: Pending request? true\n",node_of_guest->nickname);
+        printf("[%s]: has found a request by %s\n",node_of_guest->nickname,node_of_guest->adversary_nickname);
+        printf("[%s]: I have to ask my guest if it wants to accept\n",node_of_guest->nickname);
+    #endif
 
     if(SetSocketBlockingEnabled(sock,true)==false){
             printf("[%s]: Error in setting blocking socket\nI've to abort!",node_of_guest->nickname);
@@ -117,7 +125,9 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
     Message* mex_to_send = create_M_REQ_ACCEPT_PLAY_TO_ACK(node_of_guest->adversary_nickname,authenticationInstance);
 
     if(send_MESSAGE(sock,mex_to_send)){
-		printf("M_REQ_ACCEPT_PLAY_TO_ACK sent\n");
+        #if defined PROTOCOL_DEBUG
+		    printf("M_REQ_ACCEPT_PLAY_TO_ACK sent\n");
+        #endif
 	    free_MESSAGE(&mex_to_send);
     }else{
         printf("[%s]: Unable to create M_REQ_ACCEPT_PLAY_TO_ACK\nAbort\n",node_of_guest->nickname);
@@ -132,8 +142,9 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
         return false;
     }
 
-    printf("[%s]:M_RES_ACCEPT_PLAY_ACK received\n",node_of_guest->nickname);
-
+    #if defined PROTOCOL_DEBUG
+        printf("[%s]:M_RES_ACCEPT_PLAY_ACK received\n",node_of_guest->nickname);
+    #endif
     //get response
     char answer;
     if( handler_M_RES_ACCEPT_PLAY_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance,&answer) != 1){
@@ -141,10 +152,15 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
         return false;
     }
 
-    printf("[%s]: M_RES_ACCEPT_PLAY_ACK handled correctly\nanswer -> %c\n",authenticationInstance->nickname_client,answer);
+    #if defined PROTOCOL_DEBUG
+    printf("[%s]: M_RES_ACCEPT_PLAY_ACK handled correctly\n",authenticationInstance->nickname_client);
+    #endif
+    #if defined VERBOSE_LEVEL
+    printf("[%s]:Received answer -> %c\n",authenticationInstance->nickname_client,answer);
+    #endif
 
     bool guest_answer = answer=='1'?true:false;
-    printf("[%s]: Answer --> %d\n",authenticationInstance->nickname_client,guest_answer);
+    //printf("[%s]: Answer --> %d\n",authenticationInstance->nickname_client,guest_answer);
     pthread_mutex_lock(&mutex_list_users);
     if(guest_answer==true){ //has accepted
         node_of_guest->accepted=true;
@@ -158,7 +174,9 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
 
         mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);  
         if(send_MESSAGE(sock,mex_to_send)){
-            printf("M_PRELIMINARY_INFO_OPPONENT sent\n");
+            #if defined PROTOCOL_DEBUG
+                printf("M_PRELIMINARY_INFO_OPPONENT sent\n");
+            #endif
             //free_MESSAGE(&mex_to_send);
         }else{
             printf("[%s]: Unable to create M_PRELIMINARY_INFO_OPPONENT\nAbort\n",node_of_guest->nickname);
@@ -297,12 +315,12 @@ void *thread_handler_client(void *ptr) {
                 //send M2
                 mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    #if defined DEBUG_LEVEL
+                    #if defined PROTOCOL_DEBUG
                         printf("[Self-said %s]: M2_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
                     #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
-                    #if defined DEBUG_LEVEL
+                    #if defined PROTOCOL_DEBUG
                         printf("[Self-said %s]: Unable to create M2_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
                     #endif
                     free(authenticationInstance);
@@ -323,13 +341,15 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                #if defined DEBUG_LEVEL
+                #if defined PROTOCOL_DEBUG
                     printf("[Self-said %s]: M3_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
                 #endif
                 //send M4
                 mex_to_send = create_M4_CLIENT_SERVER_AUTH(authenticationInstance);   
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[Self-said %s]: M4_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[Self-said %s]: M4_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
+                    #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[Self-said %s]: Unable to create M4_CLIENT_SERVER_AUTH\nAbort\n",authenticationInstance->nickname_client);
@@ -345,6 +365,8 @@ void *thread_handler_client(void *ptr) {
                 user_counter++; 
                 pthread_mutex_unlock(&mutex_list_users);
 
+                printf("[%s]:" GREEN  "**Successful authentication**\n"  RESET,authenticationInstance->nickname_client);
+
             break;
 
             case M_LISTEN_PORT_CLIENT_P2P:
@@ -355,15 +377,19 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_LISTEN_PORT_CLIENT_P2P\n",guest_nickname);
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M_LISTEN_PORT_CLIENT_P2P\n",guest_nickname);
+                #endif
                 int client_port_p2p;
                 if( handler_M_LISTEN_PORT_CLIENT_P2P(mex_received->payload,mex_received->payload_len,authenticationInstance,&client_port_p2p) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
 
-                printf("[%s]: M_LISTEN_PORT_CLIENT_P2P handled correctly\n",guest_nickname);
-
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M_LISTEN_PORT_CLIENT_P2P handled correctly\n",guest_nickname);
+                #endif
                 //adjust port
                 pthread_mutex_lock(&mutex_list_users);
                 node_of_guest->address.sin_port = htons(client_port_p2p);
@@ -379,18 +405,24 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_REQ_LIST\n",guest_nickname);
-                
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M_REQ_LIST\n",guest_nickname);
+                #endif
+
                 if( handler_M_REQ_LIST(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("[%s]: M_REQ_LIST handled correctly\n",guest_nickname);
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M_REQ_LIST handled correctly\n",guest_nickname);
+                #endif
 
                 mex_to_send = create_M_RES_LIST(authenticationInstance,head_of_list_users,user_counter, mutex_list_users);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[%s]: M_RES_LIST sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[%s]: M_RES_LIST sent\n",authenticationInstance->nickname_client);
+                    #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[%s]: Unable to create M_RES_LIST\nAbort\n",authenticationInstance->nickname_client);
@@ -408,14 +440,17 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_CLOSE\n",guest_nickname);
-                
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M_CLOSE\n",guest_nickname);
+                #endif
+
                 if( handler_M_CLOSE(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("[%s]: M_CLOSE handled correctly\n",guest_nickname);
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M_CLOSE handled correctly\n",guest_nickname);
+                #endif
                 goto closing_sock;
 
             break;
@@ -428,18 +463,24 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_REQ_PLAY\n",guest_nickname);
-                
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M_REQ_PLAY\n",guest_nickname);
+                #endif
+
                 if( handler_M_REQ_PLAY(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("[%s]: M_REQ_PLAY handled correctly\n",guest_nickname);
-                
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M_REQ_PLAY handled correctly\n",guest_nickname);
+                #endif
+
                 mex_to_send = create_M_RES_PLAY_TO_ACK(authenticationInstance);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[%s]: M_RES_PLAY_TO_ACK sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[%s]: M_RES_PLAY_TO_ACK sent\n",authenticationInstance->nickname_client);
+                    #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[%s]: Unable to create M_RES_PLAY_TO_ACK\nAbort\n",authenticationInstance->nickname_client);
@@ -457,16 +498,19 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M_RES_PLAY_ACK\n",guest_nickname);
-                
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M_RES_PLAY_ACK\n",guest_nickname);
+                #endif
+
                 if( handler_M_RES_PLAY_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("[%s]: M_RES_PLAY_ACK handled correctly\n",guest_nickname);
-                printf("[%s]: M_RES_PLAY is FRESH\n",guest_nickname);
-
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M_RES_PLAY_ACK handled correctly\n",guest_nickname);
+                    printf("[%s]: M_RES_PLAY is FRESH\n",guest_nickname);
+                #endif
 
                 printf("[%s]:Nickname to contact -> %s\n",node_of_guest->nickname,authenticationInstance->nickname_opponent_required);
                 result = try_to_challenge(authenticationInstance->nickname_opponent_required,node_of_guest,&adversary_port);
@@ -475,7 +519,9 @@ void *thread_handler_client(void *ptr) {
                 
                 mex_to_send = create_M_RES_PLAY_OPPONENT(response,adversary_port,authenticationInstance);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[%s]: M_RES_PLAY_OPPONENT sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[%s]: M_RES_PLAY_OPPONENT sent\n",authenticationInstance->nickname_client);
+                    #endif
                     free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[%s]: Unable to create M_RES_PLAY_OPPONENT\nAbort\n",authenticationInstance->nickname_client);
@@ -485,8 +531,9 @@ void *thread_handler_client(void *ptr) {
 
                 if(result == true){
                     //send to MASTER
-                    printf("[%s]: inform the user of opponent's pubkey\n",authenticationInstance->nickname_client);
-
+                    #ifdef PROTOCOL_DEBUG
+                        printf("[%s]: inform the user of opponent's pubkey\n",authenticationInstance->nickname_client);
+                    #endif
                     //retrieve opponent's pubkey
                     //retrieving PubKeyClient
                     reformat_nickname(authenticationInstance->nickname_opponent_required);
@@ -495,7 +542,9 @@ void *thread_handler_client(void *ptr) {
             
                     mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);
                     if(send_MESSAGE(conn->sock,mex_to_send)){
-                        printf("[%s]: M_PRELIMINARY_INFO_OPPONENT sent\n",authenticationInstance->nickname_client);
+                        #if defined PROTOCOL_DEBUG
+                            printf("[%s]: M_PRELIMINARY_INFO_OPPONENT sent\n",authenticationInstance->nickname_client);
+                        #endif
                         //free_MESSAGE(&mex_to_send);
                     }else{
                         printf("[%s]: Unable to create M_PRELIMINARY_INFO_OPPONENT\nAbort\n",authenticationInstance->nickname_client);
@@ -515,18 +564,25 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: Received M1_INFORM_SERVER_GAME_START\n",guest_nickname);
-                
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: Received M1_INFORM_SERVER_GAME_START\n",guest_nickname);
+                #endif
+
                 if( handler_M1_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-            
-                printf("[%s]: M1_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+
+                #if defined PROTOCOL_DEBUG 
+                    printf("[%s]: M1_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+                #endif
 
                 mex_to_send = create_M2_INFORM_SERVER_GAME_START(authenticationInstance);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[%s]: M2_INFORM_SERVER_GAME_START sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[%s]: M2_INFORM_SERVER_GAME_START sent\n",authenticationInstance->nickname_client);
+                    #endif
                     //free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_START\nAbort\n",authenticationInstance->nickname_client);
@@ -544,19 +600,25 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: M3_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M3_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
+                #endif
                 printf("[%s]: The client has started a game. we've to wait till the end\n",guest_nickname);
 
                 do{
                     read_MESSAGE(conn->sock,mex_received);
                 }while((mex_received->opcode != M1_INFORM_SERVER_GAME_END) || (handler_M1_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1));
-
-                printf("[%s]:Received M1_INFORM_SERVER_GAME_END\n",guest_nickname);
+                
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]:Received M1_INFORM_SERVER_GAME_END\n",guest_nickname);
+                #endif
 
                 mex_to_send = create_M2_INFORM_SERVER_GAME_END(authenticationInstance);
                 
                 if(send_MESSAGE(conn->sock,mex_to_send)){
-                    printf("[%s]: M2_INFORM_SERVER_GAME_END sent\n",authenticationInstance->nickname_client);
+                    #if defined PROTOCOL_DEBUG
+                        printf("[%s]: M2_INFORM_SERVER_GAME_END sent\n",authenticationInstance->nickname_client);
+                    #endif
                     //free_MESSAGE(&mex_to_send);
                 }else{
                     printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_END\nAbort\n",authenticationInstance->nickname_client);
@@ -576,8 +638,11 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-                printf("[%s]: M3_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
-        
+
+                #if defined PROTOCOL_DEBUG
+                    printf("[%s]: M3_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
+                #endif
+
                 //in the meanwhile the server is waiting for the end of game OPCODE
                 printf("[%s]: The client has notified the end of the game\n",guest_nickname);
                 //reset the info in list_user (accepted = false; adversary_nickname = "")
@@ -605,7 +670,9 @@ closing_sock:
     /* close socket and clean up */
     mex_to_send = create_M_CLOSE(authenticationInstance);
     if(send_MESSAGE(conn->sock,mex_to_send)){
-        printf("[%s]: M_CLOSE sent\n",authenticationInstance->nickname_client);
+        #if defined PROTOCOL_DEBUG
+            printf("[%s]: M_CLOSE sent\n",authenticationInstance->nickname_client);
+        #endif
         //free_MESSAGE(&mex_to_send);
     }else{
         printf("[%s]: Unable to create M_CLOSE\nAbort\n",authenticationInstance->nickname_client);
@@ -659,10 +726,10 @@ int main(int argc, char **argv) {
         return -5;
     }
 
-    #if defined DEBUG_LEVEL
-        printf( CYAN "DEBUG: ENABLED\n"  RESET);
+    #if defined PROTOCOL_DEBUG
+        printf( CYAN "PROTOCOL_DEBUG: ENABLED\n"  RESET);
     #else
-        printf( CYAN "DEBUG: DISABLED\n"  RESET);
+        printf( CYAN "PROTOCOL_DEBUG: DISABLED\n"  RESET);
     #endif
 
 

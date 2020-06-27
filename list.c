@@ -63,8 +63,6 @@ char* printListInBufferForClient(struct node *head, char * nickname_client, int 
    if(strlen(buffer_max_to_return) == 0)
       sprintf(buffer_max_to_return + strlen(buffer_max_to_return),"Nobody is online, retry after a while\n");
 
-   printf("LIST BUFFER -> %s",buffer_max_to_return);
-
    *buffer_len = strlen(buffer_max_to_return) + 1;
    return buffer_max_to_return;
 }

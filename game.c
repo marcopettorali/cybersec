@@ -252,7 +252,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                     if (win == OPPONENT) {
                         system("clear");
                         print_game_grid(game_grid);
-                        printf( MAGENTA "The opponent won the match\n" RESET);
+                        printf( MAGENTA "YOU LOOSE!\n" RESET);
                         break;
                     }
                 }
