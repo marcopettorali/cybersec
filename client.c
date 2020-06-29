@@ -92,7 +92,7 @@ void *thread_handler_gaming(void *ptr) {
                     if (game_run(&infoToPlay->authenticationInstanceToPlay->nickname_local[0],
                                  &infoToPlay->authenticationInstanceToPlay->nickname_opponent[0],
                                  &infoToPlay->authenticationInstanceToPlay->symmetric_key[0], infoToPlay->connection->sock, 0) == GAME_END_ERROR) {
-                        printf("Game ended because of an error!!!\n");
+                        printf("Lost connection with the opponent\n");
                         pthread_exit(NULL);
                     } else {
                         printf("Game ended correctly!\n");
@@ -158,9 +158,8 @@ void *thread_handler_gaming(void *ptr) {
                     if (game_run(&infoToPlay->authenticationInstanceToPlay->nickname_local[0],
                                  &infoToPlay->authenticationInstanceToPlay->nickname_opponent[0],
                                  &infoToPlay->authenticationInstanceToPlay->symmetric_key[0], infoToPlay->connection->sock, 1) == GAME_END_ERROR) {
-                        printf("Game ended because of an error!!!\n");
+                        printf("Lost connection with the opponent\n");
                         pthread_exit(NULL);
-                        ;
                     } else {
                         printf("Game ended correctly!\n");
                         pthread_exit(0);

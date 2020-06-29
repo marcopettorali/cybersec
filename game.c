@@ -167,7 +167,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
 
     int move_counter = 0;
     if (slave == 1) {
-        printf("Waiting for the opponent's move...");
+        printf("Waiting for the opponent's move...\n");
         char player_1[NICKNAME_LENGTH];
         char player_2[NICKNAME_LENGTH];
         char count;
@@ -252,7 +252,7 @@ int game_run(char* p_n, char* o_n, unsigned char* symmetric_key, int so, int sla
                     if (win == OPPONENT) {
                         system("clear");
                         print_game_grid(game_grid);
-                        printf( MAGENTA "YOU LOOSE!\n" RESET);
+                        printf( MAGENTA "YOU LOSE!\n" RESET);
                         break;
                     }
                 }
