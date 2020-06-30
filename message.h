@@ -82,6 +82,8 @@ typedef struct {
 #define M4_CLIENT_CLIENT_AUTH 124  // |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
 #define SUCCESSFUL_CLIENT_CLIENT_AUTH 125
 
+#define M_CLOSE 126  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
+
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance* authInstance);
 int handler_M1_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance);
 Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
@@ -161,7 +163,6 @@ int handler_M4_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
 bool get_and_verify_info_M4_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance);
 
 // CODICE_MARCO_END
-#define M_CLOSE 122  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
 
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance * authInstance);
 int handler_M1_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
