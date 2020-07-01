@@ -3,6 +3,7 @@
 
 #define OPCODE_SIZE 1
 #define PAYLOAD_LEN_SIZE sizeof(int)
+#define COUNTER_SIZE sizeof(int)
 
 #define NICKNAME_LENGTH 16
 #define PORT_FOR_GAMING 20200
