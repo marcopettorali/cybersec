@@ -5,11 +5,13 @@
 
 #include "util.h"
 
-int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len, unsigned char *ciphertext, unsigned char *tag) {
+int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len,
+                unsigned char *ciphertext, unsigned char *tag) {
     // create context
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
-        EXCEPTION("EVP_CIPHER_CTX_new() failed", __func__);
+        printf("EVP_CIPHER_CTX_new() failed\n");
+        return -1;
     }
 
     // encrypt phase
@@ -19,33 +21,39 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
     // encrypt init
     int ret = EVP_EncryptInit(ctx, EVP_aes_128_gcm(), key, iv);
     if (ret != 1) {
-        EXCEPTION("EVP_EncryptInit() failed", __func__);
+        printf("EVP_EncryptInit() failed\n");
+        return -1;
     }
 
     // feed the AAD
     ret = EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len);
     if (ret != 1) {
-        EXCEPTION("EVP_EncryptUpdate() failed (when adding aad)", __func__);
+        printf("EVP_EncryptUpdate() failed (when adding aad)\n");
+        return -1;
     }
 
     // feed plaintext
     ret = EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len);
     if (ret != 1) {
-        EXCEPTION("EVP_EncryptUpdate() failed", __func__);
+        printf("EVP_EncryptUpdate() failed\n");
+        return -1;
     }
+
     ciphertext_len = len;
 
     // finalize
     ret = EVP_EncryptFinal(ctx, ciphertext + len, &len);
     if (ret != 1) {
-        EXCEPTION("EVP_EncryptFinal() failed", __func__);
+        printf("EVP_EncryptFinal() failed\n");
+        return -1;
     }
     ciphertext_len += len;
 
     // get tag
     ret = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, GCM_TAG_SIZE, tag);
     if (ret != 1) {
-        EXCEPTION("EVP_CIPHER_CTX_ctrl() failed", __func__);
+        printf("EVP_CIPHER_CTX_ctrl() failed\n");
+        return -1;
     }
 
     // free the context
@@ -54,13 +62,15 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
     return ciphertext_len;
 }
 
-int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aad, int aad_len, unsigned char *tag, unsigned char *key, unsigned char *iv, int iv_len, unsigned char *plaintext) {
+int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aad, int aad_len, unsigned char *tag, unsigned char *key,
+                unsigned char *iv, int iv_len, unsigned char *plaintext) {
     int ret;
 
     // create context
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
-        EXCEPTION("EVP_CIPHER_CTX_new() failed", __func__);
+        printf("EVP_CIPHER_CTX_new() failed\n");
+        return -1;
     }
 
     // decrypt phase
@@ -70,26 +80,29 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     // decrypt init
     ret = EVP_DecryptInit(ctx, EVP_aes_128_gcm(), key, iv);
     if (ret != 1) {
-        EXCEPTION("EVP_DecryptInit() failed", __func__);
+        printf("EVP_DecryptInit() failed\n");
+        return -1;
     }
 
     // feed the AAD
     ret = EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len);
     if (ret != 1) {
-        EXCEPTION("EVP_DecryptUpdate() failed (when adding aad)", __func__);
+        printf("EVP_DecryptUpdate() failed (when adding aad)\n");
+        return -1;
     }
-
     // feed the ciphertext
     ret = EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len);
     if (ret != 1) {
-        EXCEPTION("EVP_DecryptUpdate() failed", __func__);
+        printf("EVP_DecryptUpdate() failed\n");
+        return -1;
     }
     plaintext_len = len;
 
     // set tag
     ret = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, GCM_TAG_SIZE, tag);
     if (ret != 1) {
-        EXCEPTION("EVP_CIPHER_CTX_ctrl() failed", __func__);
+        printf("EVP_CIPHER_CTX_ctrl() failed\n");
+        return -1;
     }
 
     ret = EVP_DecryptFinal(ctx, plaintext + len, &len);
@@ -102,7 +115,7 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
         return plaintext_len;
 
     } else {
-        DEBUG("Tag verify failed", __func__);
+        printf("Tag verify failed\n");
         return -1;
     }
 }
@@ -123,7 +136,10 @@ unsigned char *prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_le
     // initialize index in the ciphertext
     int ct_index = 0;
 
-    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag);
+    if (gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE,
+                    &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag) == -1) {
+        return NULL;
+    }
 
     memcpy(&ciphertext[ct_index], iv, GCM_IV_SIZE);
     ct_index += GCM_IV_SIZE;
@@ -158,35 +174,131 @@ unsigned char *extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_
     memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
 
-    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE, &plaintext[0]);
+    if (gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
+                    &iv[0], GCM_IV_SIZE, &plaintext[0]) == -1) {
+        return NULL;
+    }
 
     return plaintext;
 }
-/* TO BE MOVED HERE
-void generate_symmetric_key(unsigned char **key,unsigned long key_len){
-        RAND_poll();
-        int rc = RAND_bytes(*key, key_len);
-        //unsigned long err = ERR_get_error();
 
-        if(rc != 1) {
-                printf("Error in generating key\n");
-                exit(1);
-        }
-}*/
-/*
+EVP_PKEY *generate_dh_public_key() {
+    // load EC parameters
+    EVP_PKEY_CTX *params_ctx;
+    EVP_PKEY *params = NULL;
+    params_ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+
+    if (!(params_ctx)) {
+        printf("Error in EVP_PKEY_CTX_new_id, in the function prepare_dh_public_key()\n");
+        return NULL;
+    };
+    if (!EVP_PKEY_paramgen_init(params_ctx)) {
+        printf("Error in EVP_PKEY_paramgen_init, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+    if (!EVP_PKEY_CTX_set_ec_paramgen_curve_nid(params_ctx, NID_X9_62_prime256v1)) {
+        printf("Error in EVP_PKEY_CTX_set_ec_paramgen_curve_nid, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+    if (!EVP_PKEY_paramgen(params_ctx, &params)) {
+        printf("Error in EVP_PKEY_paramgen, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+
+    // create public key
+    EVP_PKEY_CTX *ctx;
+    EVP_PKEY *my_ecdhkey = NULL;
+    if (NULL == (ctx = EVP_PKEY_CTX_new(params, NULL))) {
+        printf("Error in EVP_PKEY_CTX_new, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+    if (!EVP_PKEY_keygen_init(ctx)) {
+        printf("Error in EVP_PKEY_keygen_init, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+    if (!EVP_PKEY_keygen(ctx, &my_ecdhkey)) {
+        printf("Error in EVP_PKEY_keygen, in the function prepare_dh_public_key()\n");
+        return NULL;
+    }
+
+    // free all the structures
+    EVP_PKEY_CTX_free(params_ctx);
+    EVP_PKEY_free(params);
+    EVP_PKEY_CTX_free(ctx);
+
+    return my_ecdhkey;
+}
+
+unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_dh_public_key, int *shared_key_length) {
+    // choose the hash algorithm to use
+    const EVP_MD *hash_algorithm = EVP_sha256();
+
+    // derive the shared secret
+    EVP_PKEY_CTX *derive_ctx;
+    unsigned char *shared_secret;
+    size_t shared_secret_len;
+
+    if (NULL == (derive_ctx = EVP_PKEY_CTX_new(my_dh_public_key, NULL))) {
+        printf("Error in EVP_PKEY_CTX_new, in the function derive_dh_public_key()\n");
+        return NULL;
+    };
+    if (EVP_PKEY_derive_init(derive_ctx) <= 0) {
+        printf("Error in EVP_PKEY_derive_init, in the function derive_dh_public_key()\n");
+        return NULL;
+    };
+    if (EVP_PKEY_derive_set_peer(derive_ctx, peer_dh_public_key) <= 0) {
+        printf("Error in EVP_PKEY_derive_set_peer, in the function derive_dh_public_key()\n");
+        return NULL;
+    };
+
+    EVP_PKEY_derive(derive_ctx, NULL, &shared_secret_len);
+    shared_secret = (unsigned char *)(malloc((int)(shared_secret_len)));
+    if (!shared_secret) {
+        printf("Error in malloc for the shared secret, in the function derive_dh_public_key()\n");
+        return NULL;
+    };
+    if (EVP_PKEY_derive(derive_ctx, shared_secret, &shared_secret_len) <= 0) {
+        printf("Error in EVP_PKEY_derive, in the function derive_dh_public_key()\n");
+        return NULL;
+    };
+
+    // extract the digest of the shared secret
+    unsigned char *shared_secret_digest;
+    unsigned int shared_secret_digest_len;
+    EVP_MD_CTX *hash_ctx;
+    hash_ctx = EVP_MD_CTX_new();
+    shared_secret_digest = (unsigned char *)malloc(EVP_MD_size(hash_algorithm));
+    EVP_DigestInit(hash_ctx, hash_algorithm);
+    EVP_DigestUpdate(hash_ctx, (unsigned char *)shared_secret, shared_secret_len);
+    EVP_DigestFinal(hash_ctx, shared_secret_digest, &shared_secret_digest_len);
+
+    // free all the structures
+    //EVP_PKEY_free(my_dh_public_key);
+    //EVP_PKEY_free(peer_dh_public_key);
+    EVP_PKEY_CTX_free(derive_ctx);
+    EVP_MD_CTX_free(hash_ctx);
+
+    *shared_key_length = shared_secret_digest_len;
+    return shared_secret_digest;
+}
+
 int main() {
-    int tag_len;
+    EVP_PKEY* my_dh_pubk = generate_dh_public_key();
+    EVP_PKEY* peer_dh_pubk = generate_dh_public_key();
 
-    unsigned char *pt = "BELLARAGA!!!!";
-    unsigned char* shared_key = (unsigned char*)malloc(18);
-    memcpy(&shared_key[0], "abcdefghilmnopqrs", 18);
+    int my_len;
+    int peer_len;
+    unsigned char* my_shared_secret = derive_dh_public_key(my_dh_pubk, peer_dh_pubk, &my_len);
+    unsigned char* peer_shared_secret = derive_dh_public_key(peer_dh_pubk, my_dh_pubk, &peer_len);
 
-    unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
-    prepare_gcm_ciphertext(&pt[0], strlen(pt), &ciphertext[0], &shared_key[0]);
-
-    unsigned char *received_pt = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt));
-    extract_gcm_ciphertext(&ciphertext[0], GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + strlen(pt), &received_pt[0], &shared_key[0]);
-
-    printf("plaintext = %s.\n", received_pt);
+    if(my_len == peer_len && memcmp(my_shared_secret, peer_shared_secret, my_len) == 0){
+        printf("ALL OK!!\n");
+    }else{
+        printf("mine\n");
+        BIO_dump_fp(stdout, (const char*) my_shared_secret, my_len);
+        printf("peer's\n");
+        BIO_dump_fp(stdout, (const char*) peer_shared_secret, peer_len);
+    }
+    
     return 0;
-}*/
+}
