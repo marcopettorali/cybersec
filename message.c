@@ -2652,6 +2652,98 @@ unsigned char* get_asymmetric_decrypted_digital_envelope(unsigned char* cipherte
     return clear_buf;
 }
 
+unsigned char* get_signature(unsigned char* clear_buf, int clear_size, EVP_PKEY* prvkey, int* returning_size){
+
+    // declare some useful variables:
+   const EVP_MD* md = EVP_sha256();
+
+   // create the signature context:
+   EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
+   if(!md_ctx){
+        printf("Error: EVP_MD_CTX_new returned NULL\n");
+        return NULL;
+    }
+
+    // allocate buffer for signature:
+    unsigned char* sgnt_buf = (unsigned char*)malloc(EVP_PKEY_size(prvkey));
+    if(!sgnt_buf){
+        printf("Error: malloc returned NULL (signature too big?)\n");
+        return NULL;
+    }
+
+    // sign the plaintext:
+    // (perform a single update on the whole plaintext, 
+    // assuming that the plaintext is not huge)
+    int ret = EVP_SignInit(md_ctx, md);
+    if(ret == 0){
+        printf("Error: EVP_SignInit returned %d \n",ret);
+        return NULL;
+    }
+    ret = EVP_SignUpdate(md_ctx, clear_buf, clear_size);
+    if(ret == 0){
+        printf("Error: EVP_SignUpdate returned %d \n",ret);
+        return NULL;
+    }
+    unsigned int sgnt_size;
+    ret = EVP_SignFinal(md_ctx, sgnt_buf, &sgnt_size, prvkey);
+    if(ret == 0){
+        printf("Error: EVP_SignFinal returned %d \n",ret);
+        return NULL;
+    }
+
+    // delete the digest and the private key from memory:
+    EVP_MD_CTX_free(md_ctx);
+
+    *returning_size = sgnt_size;
+    return sgnt_buf;
+}
+
+bool verify_signature(unsigned char* clear_buf, int clear_size,unsigned char* sgnt_buf, int sgnt_size, EVP_PKEY* pubkey){
+
+    // declare some useful variables:
+    const EVP_MD* md = EVP_sha256();
+
+    // create the signature context:
+    EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
+    if(!md_ctx){
+        printf("Error: EVP_MD_CTX_new returned NULL\n");
+        return false;
+    }
+
+    // verify the plaintext:
+    // (perform a single update on the whole plaintext, 
+    // assuming that the plaintext is not huge)
+    int ret = EVP_VerifyInit(md_ctx, md);
+    if(ret == 0){
+        printf("Error: EVP_VerifyInit returned %d \n",ret);
+        return false;
+    }
+    ret = EVP_VerifyUpdate(md_ctx, clear_buf, clear_size);  
+    if(ret == 0){
+        printf("Error: EVP_VerifyUpdate returned %d \n",ret);
+        return false;
+    }
+    ret = EVP_VerifyFinal(md_ctx, sgnt_buf, sgnt_size, pubkey);
+    if(ret != 1){ // it is 0 if invalid signature, -1 if some other error, 1 if success.
+        printf("Error: EVP_VerifyFinal returned %d (invalidate signature)\n",ret);
+        return false;
+    }
+
+    EVP_MD_CTX_free(md_ctx);
+
+    return true;
+
+}
+
+
+
+
+
+
+
+
+
+
 void generate_symmetric_key(unsigned char** key, unsigned long key_len) {
     RAND_poll();
     int rc = RAND_bytes(*key, key_len);
@@ -3123,7 +3215,7 @@ Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
 
     // get ciphertext Ekab
     int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(mex->opcode,&(mex->payload_len),authInstance->counter,pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
     if (ciphertext_and_info_buf == NULL) {
         printf("Error: Unable to create ciphertext Ekab\n");
         return NULL;
@@ -3160,7 +3252,7 @@ int handler_M4_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
     int ciphertext_size = payload_len;
     int plaintext_size;
 
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext(M4_CLIENT_CLIENT_AUTH,authInstance->counter,ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
     if (plaintext == NULL) {
         printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;

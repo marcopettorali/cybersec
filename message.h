@@ -29,6 +29,7 @@ typedef struct {
     char expected_opcode;
     char nickname_opponent_required[NICKNAME_LENGTH];  // NEEDED for playing
     unsigned char nonce_server[NONCE_32];              // NEEDED for playing
+    int counter; //TO AVOID REPLAY ATTACK
 } AuthenticationInstance;
 
 typedef struct {
@@ -42,6 +43,7 @@ typedef struct {
     EVP_PKEY* opponent_pub_key;
     EVP_PKEY* local_priv_key;
     char expected_opcode;
+    int counter; //TO AVOID REPLAY ATTACK
 } AuthenticationInstanceToPlay;
 
 #endif
@@ -260,3 +262,7 @@ bool client_authentication(char* username_client, EVP_PKEY** p_prvkey);
 
 // TO BE MOVED INTO crypto.h
 void generate_symmetric_key(unsigned char** key, unsigned long key_len);
+
+// TO BE MOVED INTO digital_signature.h
+unsigned char* get_signature(unsigned char* clear_buf, int clear_size, EVP_PKEY* prvkey, int* returning_size);
+bool verify_signature(unsigned char* clear_buf, int clear_size,unsigned char* sgnt_buf, int sgnt_size, EVP_PKEY* pubkey);
