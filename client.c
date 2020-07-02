@@ -443,44 +443,14 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         printf("Insert the adversary username -> ");
 
                         char username_opponent[NICKNAME_LENGTH];
-                        secure_input(username_opponent, NICKNAME_LENGTH);
+                        //secure_input(username_opponent, NICKNAME_LENGTH);
+                        fgets(username_opponent, NICKNAME_LENGTH, stdin);
                         username_opponent[NICKNAME_LENGTH - 1] = '\0';
 
                         mex = create_M_REQ_PLAY(username_opponent, authenticationInstance);
                         if (send_MESSAGE(sock, mex)){
                             #if defined PROTOCOL_DEBUG
                                 printf("M_REQ_PLAY sent\n");
-                            #endif
-                        }
-                        free_MESSAGE(&mex);
-
-                        // Waiting for M_RES_PLAY_TO_ACK
-                        read(sock, &mex_received->opcode, OPCODE_SIZE);
-                        if (mex_received->opcode != M_RES_PLAY_TO_ACK) {
-                            printf("Expected M_RES_PLAY_TO_ACK but arrived another mex\nAbort\n");
-                            close(sock);
-                            close(sock_to_play);
-                            return;
-                        }
-
-                        read_MESSAGE_payload(sock, mex_received);
-
-                        if (handler_M_RES_PLAY_TO_ACK(mex_received->payload, mex_received->payload_len, authenticationInstance) != 1) {
-                            free(authenticationInstance);
-                            printf("Error in handler_M_RES_PLAY_TO_ACK\nAbort");
-                            close(sock);
-                            close(sock_to_play);
-                            return;
-                        }
-
-                        #if defined PROTOCOL_DEBUG
-                            printf("M_RES_PLAY_TO_ACK handled correctly\n");
-                        #endif
-
-                        mex = create_M_RES_PLAY_ACK(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)){
-                            #if defined PROTOCOL_DEBUG
-                                printf("M_RES_PLAY_ACK sent\n");
                             #endif
                         }
                         free_MESSAGE(&mex);
@@ -523,6 +493,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
 
                             // WAIT FOR OPPONENT INFO
                             // here will received the MASTER
+
                             read(sock, &mex_received->opcode, OPCODE_SIZE);
                             if (mex_received->opcode != M_PRELIMINARY_INFO_OPPONENT) {
                                 printf("Expected M_PRELIMINARY_INFO_OPPONENT but arrived another mex\nAbort\n");
@@ -672,6 +643,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
 
                         if (answer == '1') {
                             // WAIT FOR M_PRELIMINARY_INFO_OPPONENT
+                            free_MESSAGE(&mex_received);
+                            mex_received = (Message *)malloc(sizeof(Message));
+
                             read(sock, &mex_received->opcode, OPCODE_SIZE);
                             if (mex_received->opcode == M_PRELIMINARY_INFO_OPPONENT) {
                                 // here will received the slave
@@ -679,6 +653,10 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 printf("The server has sent the opponent's info (slave)\n");
                                 #endif
                                 read_MESSAGE_payload(sock, mex_received);
+                                printf("mex_received->payload_len %d\n",mex_received->payload_len);
+                                BIO_dump_fp(stdout, (const char *)mex_received->payload, mex_received->payload_len);
+                                printf("Read M_PRELIMINARY_INFO_OPPONENT\n");
+                                
 
                                 if (handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload, mex_received->payload_len, authenticationInstance,
                                                                         authenticationInstanceToPlay) != 1) {

@@ -175,7 +175,7 @@ bool check_pending_request(struct node * node_of_guest, int sock,AuthenticationI
         mex_to_send = create_M_PRELIMINARY_INFO_OPPONENT(pub_key_opponent,authenticationInstance);  
         if(send_MESSAGE(sock,mex_to_send)){
             #if defined PROTOCOL_DEBUG
-                printf("M_PRELIMINARY_INFO_OPPONENT sent\n");
+                printf("[%s]:M_PRELIMINARY_INFO_OPPONENT sent\n",authenticationInstance->nickname_client);
             #endif
             //free_MESSAGE(&mex_to_send);
         }else{

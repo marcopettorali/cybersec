@@ -149,8 +149,8 @@ Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance, EVP_
     //Get DH params
     EVP_PKEY *my_dh_private_key = NULL;
     EVP_PKEY *my_dh_public_key = generate_dh_public_key(&my_dh_private_key, 0);
-    int my_dh_publick_key_size = EVP_PKEY_size(my_dh_public_key);
-    printf("my_dh_publick_key_size %d\n",my_dh_publick_key_size);
+    //int my_dh_publick_key_size = EVP_PKEY_size(my_dh_public_key);
+    //printf("my_dh_publick_key_size %d\n",my_dh_publick_key_size);
     //upload values in authInstance
     authInstance->my_dh_private_key = my_dh_private_key;
 
@@ -1870,23 +1870,24 @@ Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, Authenti
 
 int handler_M_PRELIMINARY_INFO_OPPONENT(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, AuthenticationInstanceToPlay* authInstanceToPlay) {
     // Mex format |op|len|EKas(ID_LOCAL ID_OPPONENT length_pub_key PUBKeyOPPONENT)|
-
+printf("Dentro handler_M_PRELIMINARY_INFO_OPPONENT");
     // get plaintext
     unsigned char* ciphertext = &(payload[0]);
     int ciphertext_size = payload_len;
     int plaintext_size;
-
+printf("dopo allocazione ");
     unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
     if (plaintext == NULL) {
         printf("Error in decryption symmetric ciphertext M_PRELIMINARY_INFO_OPPONENT\nAbort\n");
         return 0;
     }
+printf("prima get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT");
     // extract and verify info in plaintext
     if (get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT(plaintext, authInstance, authInstanceToPlay) == false) {
         printf("Not consistent info received in M_PRELIMINARY_INFO_OPPONENT\nAbort\n");
         return 0;
     }
-
+printf("fine handler_M_PRELIMINARY_INFO_OPPONENT");
     return 1;
 }
 

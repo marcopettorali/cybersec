@@ -61,7 +61,7 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
     // free the context
     EVP_CIPHER_CTX_free(ctx);
 
-    TEST
+    //TEST
 
     return ciphertext_len;
 }
@@ -114,7 +114,7 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     // free the context
     EVP_CIPHER_CTX_cleanup(ctx);
 
-    TEST
+    //TEST
 
     if (ret > 0) {
         plaintext_len += len;
