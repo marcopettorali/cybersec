@@ -306,7 +306,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         printf("M2_CLIENT_SERVER_AUTH handled correctly\n");
     #endif
 
-    mex = create_M3_CLIENT_SERVER_AUTH(authenticationInstance);
+    mex = create_M3_CLIENT_SERVER_AUTH(authenticationInstance, prvkey);
     if (send_MESSAGE(sock, mex)){
         #if defined PROTOCOL_DEBUG
             printf("M3_CLIENT_SERVER_AUTH sent\n");

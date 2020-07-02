@@ -29,7 +29,11 @@ typedef struct {
     char expected_opcode;
     char nickname_opponent_required[NICKNAME_LENGTH];  // NEEDED for playing
     unsigned char nonce_server[NONCE_32];              // NEEDED for playing
+    
     int counter; //TO AVOID REPLAY ATTACK
+    EVP_PKEY *my_dh_private_key;
+    EVP_PKEY *peer_dh_pub_key;
+    EVP_PKEY* client_pub_key;
 } AuthenticationInstance;
 
 typedef struct {
@@ -88,10 +92,10 @@ typedef struct {
 
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance* authInstance);
 int handler_M1_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance);
-Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
+Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance, EVP_PKEY* privkey);
 int handler_M2_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, EVP_PKEY* prvkey);
 bool get_and_verify_info_M2_CLIENT_SERVER_AUTH(unsigned char* plaintext, AuthenticationInstance* authInstance);
-Message* create_M3_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
+Message* create_M3_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance, EVP_PKEY * privkey);
 int handler_M3_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, EVP_PKEY* privkey);
 bool get_and_verify_info_M3_CLIENT_SERVER_AUTH(unsigned char* plaintext, AuthenticationInstance* authInstance);
 Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
@@ -168,10 +172,9 @@ bool get_and_verify_info_M4_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
 
 Message* create_M1_CLIENT_SERVER_AUTH(char* username_client, AuthenticationInstance * authInstance);
 int handler_M1_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance);
-Message* create_M2_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance);
+
 int handler_M2_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,EVP_PKEY* prvkey);
 bool get_and_verify_info_M2_CLIENT_SERVER_AUTH(unsigned char * plaintext,AuthenticationInstance* authInstance);
-Message* create_M3_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance);
 int handler_M3_CLIENT_SERVER_AUTH(unsigned char* payload,unsigned int payload_len,AuthenticationInstance * authInstance,EVP_PKEY* privkey);
 bool get_and_verify_info_M3_CLIENT_SERVER_AUTH(unsigned char * plaintext,AuthenticationInstance* authInstance);
 Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance * authInstance);
