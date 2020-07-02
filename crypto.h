@@ -4,7 +4,7 @@
 
 #define GCM_AAD_SIZE OPCODE_SIZE + PAYLOAD_LEN_SIZE + GCM_IV_SIZE + COUNTER_SIZE
 #define GCM_IV_SIZE 16
-#define GCM_KEY_SIZE 32
+#define GCM_KEY_SIZE 16
 #define GCM_TAG_SIZE 16
 
 int gcm_encrypt(unsigned char* plaintext, int plaintext_len, unsigned char* aad, int aad_len, unsigned char* key, unsigned char* iv, int iv_len,

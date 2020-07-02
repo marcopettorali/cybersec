@@ -580,28 +580,6 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             }
                             free_MESSAGE(&mex);
 
-                            // wait for M2_INFORM_SERVER_GAME_START
-                            read_MESSAGE(sock, mex_received);
-
-                            if (handler_M2_INFORM_SERVER_GAME_START(mex_received->payload, mex_received->payload_len, authenticationInstance) != 1) {
-                                free(authenticationInstance);
-                                printf("Error in M2_INFORM_SERVER_GAME_START\nAbort");
-                                close(sock);
-                                close(sock_to_play);
-                                return;
-                            }
-                            #if defined PROTOCOL_DEBUG
-                                printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
-                            #endif
-
-                            mex = create_M3_INFORM_SERVER_GAME_START(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)){
-                                #if defined PROTOCOL_DEBUG
-                                    printf("M3_INFORM_SERVER_GAME_START sent\n");
-                                #endif
-                            }
-                            free_MESSAGE(&mex);
-
                             InfoToPlay *infoToPlay = (InfoToPlay *)malloc(sizeof(InfoToPlay));
                             infoToPlay->connection = connection_to_play;
                             infoToPlay->authenticationInstanceToPlay = authenticationInstanceToPlay;
@@ -619,33 +597,6 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                     printf("M1_INFORM_SERVER_GAME_END sent\n");
                                 #endif
                             }
-                            free_MESSAGE(&mex);
-
-                            // wait for M2_INFORM_SERVER_GAME_END
-                            read_MESSAGE(sock, mex_received);
-                            if ((mex_received->opcode != M2_INFORM_SERVER_GAME_END) ||
-                                (handler_M2_INFORM_SERVER_GAME_END(mex_received->payload, mex_received->payload_len, authenticationInstance) != 1)) {
-                                free(authenticationInstance);
-                                if (mex_received->opcode != M2_INFORM_SERVER_GAME_END)
-                                    printf("Expected M2_INFORM_SERVER_GAME_END but another mex arrived \nAbort");
-                                else
-                                    printf("Error in M2_INFORM_SERVER_GAME_END\nAbort");
-                                close(sock);
-                                close(sock_to_play);
-                                return;
-                            }
-
-                            #if defined PROTOCOL_DEBUG
-                                printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
-                            #endif
-
-                            mex = create_M3_INFORM_SERVER_GAME_END(authenticationInstance);
-                            if (send_MESSAGE(sock, mex)){
-                                #if defined PROTOCOL_DEBUG
-                                    printf("M3_INFORM_SERVER_GAME_END sent\n");
-                                #endif
-                            }
-                            
                             free_MESSAGE(&mex);
 
                             free(connection_to_play);
@@ -778,31 +729,6 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         }
                         free_MESSAGE(&mex);
 
-                        // wait for M2_INFORM_SERVER_GAME_START
-                        read_MESSAGE(sock, mex_received);
-                        if ((mex_received->opcode != M2_INFORM_SERVER_GAME_START) ||
-                            (handler_M2_INFORM_SERVER_GAME_START(mex_received->payload, mex_received->payload_len, authenticationInstance) != 1)) {
-                            free(authenticationInstance);
-                            if (mex_received->opcode != M2_INFORM_SERVER_GAME_START)
-                                printf("Expected M2_INFORM_SERVER_GAME_START but another mex arrived \nAbort");
-                            else
-                                printf("Error in M2_INFORM_SERVER_GAME_START\nAbort");
-                            close(sock);
-                            close(sock_to_play);
-                            return;
-                        }
-
-                        #if defined PROTOCOL_DEBUG
-                            printf("M2_INFORM_SERVER_GAME_START handled correctly\n");
-                        #endif
-
-                        mex = create_M3_INFORM_SERVER_GAME_START(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)){
-                            #if defined PROTOCOL_DEBUG
-                                printf("M3_INFORM_SERVER_GAME_START sent\n");
-                            #endif
-                        }
-                        free_MESSAGE(&mex);
 
                         connection_to_play->master = false;  // to state that this thread has been contected
 
@@ -825,31 +751,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         }
                         free_MESSAGE(&mex);
 
-                        // wait for M2_INFORM_SERVER_GAME_END
-                        read_MESSAGE(sock, mex_received);
-                        if ((mex_received->opcode != M2_INFORM_SERVER_GAME_END) ||
-                            (handler_M2_INFORM_SERVER_GAME_END(mex_received->payload, mex_received->payload_len, authenticationInstance) != 1)) {
-                            free(authenticationInstance);
-                            if (mex_received->opcode != M2_INFORM_SERVER_GAME_END)
-                                printf("Expected M2_INFORM_SERVER_GAME_END but another mex arrived \nAbort");
-                            else
-                                printf("Error in M2_INFORM_SERVER_GAME_END\nAbort");
-                            close(sock);
-                            close(sock_to_play);
-                            return;
-                        }
-
-                        #if defined PROTOCOL_DEBUG
-                            printf("M2_INFORM_SERVER_GAME_END handled correctly\n");
-                        #endif
-
-                        mex = create_M3_INFORM_SERVER_GAME_END(authenticationInstance);
-                        if (send_MESSAGE(sock, mex)){
-                            #if defined PROTOCOL_DEBUG
-                                printf("M3_INFORM_SERVER_GAME_END sent\n");
-                            #endif
-                        }
-                        free_MESSAGE(&mex);
+                      
 
                     } else {
                         printf("Oh dear, something went wrong with accept()! %s\n", strerror(errno));

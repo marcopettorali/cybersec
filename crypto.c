@@ -58,7 +58,6 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
 
     // free the context
     EVP_CIPHER_CTX_free(ctx);
-
     return ciphertext_len;
 }
 
@@ -115,20 +114,20 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
         return plaintext_len;
 
     } else {
-        printf("Tag verify failed\n");
+        printf("Tag verify failed: ret = %d\n", ret);
         return -1;
     }
 }
+
 // DA MODIFICARE !!
 unsigned char *prepare_gcm_ciphertext_new(char opcode, int *payload_len, int counter, unsigned char *plaintext, int plaintext_len,
-                                      unsigned char *shared_key) {
-    // buffer to return  IV || TAG || Ciphertext
-    unsigned char *ciphertext = (unsigned char *)malloc(plaintext_len);
+                                          unsigned char *shared_key) {
+    unsigned char *ciphertext = (unsigned char *)malloc(GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
     *payload_len = GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
-    unsigned char *buffer_to_return = (unsigned char *)malloc(*payload_len);
+
+    unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
 
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
-    unsigned char *aad = (unsigned char *)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + GCM_IV_SIZE + COUNTER_SIZE);
     unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
 
     RAND_poll();
@@ -137,90 +136,70 @@ unsigned char *prepare_gcm_ciphertext_new(char opcode, int *payload_len, int cou
     int aad_index = 0;
     memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
     aad_index += OPCODE_SIZE;
-    memcpy(&aad[aad_index], payload_len, PAYLOAD_LEN_SIZE);
+    memcpy(&aad[aad_index], &payload_len[0], PAYLOAD_LEN_SIZE);
     aad_index += PAYLOAD_LEN_SIZE;
-    memcpy(&aad[aad_index], iv, GCM_IV_SIZE);
+    memcpy(&aad[aad_index], &iv[0], GCM_IV_SIZE);
     aad_index += GCM_IV_SIZE;
     memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
     aad_index += COUNTER_SIZE;
 
-BIO_dump_fp(stdout, (const char *)aad, aad_index);
-printf("IV\n");
-BIO_dump_fp(stdout, (const char *)iv, GCM_IV_SIZE);
-
     // initialize index in the ciphertext
-    int buffer_to_return_index = 0;
+    int ct_index = 0;
 
     if (gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE,
-                    &ciphertext[GCM_IV_SIZE + GCM_TAG_SIZE], tag) == -1) {
+                    &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag) == -1) {
         return NULL;
     }
 
-    // buffer to return IV || TAG || Ciphertext
+    memcpy(&ciphertext[ct_index], &iv[0], GCM_IV_SIZE);
+    ct_index += GCM_IV_SIZE;
 
-    memcpy(&buffer_to_return[buffer_to_return_index], iv, GCM_IV_SIZE);
-    buffer_to_return_index += GCM_IV_SIZE;
+    memcpy(&ciphertext[ct_index], &tag[0], GCM_TAG_SIZE);
+    ct_index += GCM_TAG_SIZE;
 
-    memcpy(&buffer_to_return[buffer_to_return_index], tag, GCM_TAG_SIZE);
-    buffer_to_return_index += GCM_TAG_SIZE;
-
-    memcpy(&buffer_to_return[buffer_to_return_index], ciphertext, plaintext_len);
-    buffer_to_return_index += plaintext_len;
-
-    free(ciphertext);
-
-    return buffer_to_return;
+    return ciphertext;
 }
 
 // DA MODIFICARE !!
-unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *payload, int payload_len, unsigned char *shared_key,
+unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *ciphertext, int ciphertext_len, unsigned char *shared_key,
                                      int *plaintext_len) {
-    // PAYLOAD =  IV || TAG || ciphertext
-    // Buffer to return
-    unsigned char *plaintext = (unsigned char *)malloc(payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
-    *plaintext_len = payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE);
+    unsigned char *plaintext = (unsigned char *)malloc(ciphertext_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
+    *plaintext_len = ciphertext_len - (GCM_IV_SIZE + GCM_TAG_SIZE);
+
+    unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
 
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
     unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
-    unsigned char *ciphertext = (unsigned char *)malloc(payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
-
-    // initialize index in the payload_index
-    int payload_index = 0;
-
-    memcpy(&iv[0], &payload[payload_index], GCM_IV_SIZE);
-    payload_index += GCM_IV_SIZE;
-
-    memcpy(&tag[0], &payload[payload_index], GCM_TAG_SIZE);
-    payload_index += GCM_TAG_SIZE;
-
-    memcpy(&ciphertext[0], &payload[payload_index], payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
-    payload_index += payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE);
 
     // prepare AAD (opcode,payload_len,IV,counter)
-    unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
     int aad_index = 0;
     memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
     aad_index += OPCODE_SIZE;
-    memcpy(&aad[aad_index], &payload_len, PAYLOAD_LEN_SIZE);
+    memcpy(&aad[aad_index], &ciphertext_len, PAYLOAD_LEN_SIZE);
     aad_index += PAYLOAD_LEN_SIZE;
-    memcpy(&aad[aad_index], iv, GCM_IV_SIZE);
+    memcpy(&aad[aad_index], &iv[0], GCM_IV_SIZE);
     aad_index += GCM_IV_SIZE;
     memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
     aad_index += COUNTER_SIZE;
 
-BIO_dump_fp(stdout, (const char *)aad, aad_index);
-printf("IV\n");
-BIO_dump_fp(stdout, (const char *)iv, GCM_IV_SIZE);
+    // initialize index in the ciphertext
+    int ct_index = 0;
 
-    if (gcm_decrypt(ciphertext, payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE,
-                    &plaintext[0]) == -1) {
+    memcpy(&iv[0], &ciphertext[ct_index], GCM_IV_SIZE);
+    ct_index += GCM_IV_SIZE;
+
+    memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
+    ct_index += GCM_TAG_SIZE;
+
+    if (gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0],
+                    GCM_IV_SIZE, &plaintext[0]) == -1) {
         return NULL;
     }
 
     return plaintext;
 }
 
-EVP_PKEY *generate_dh_public_key(EVP_PKEY**my_dh_private_key, int control) {
+EVP_PKEY *generate_dh_public_key(EVP_PKEY **my_dh_private_key, int control) {
     // load EC parameters
     EVP_PKEY_CTX *params_ctx;
     EVP_PKEY *params = NULL;
@@ -330,9 +309,9 @@ unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_private_key, EVP_PKEY *peer_
     EVP_DigestUpdate(hash_ctx, (unsigned char *)shared_secret, shared_secret_len);
     EVP_DigestFinal(hash_ctx, shared_secret_digest, &shared_secret_digest_len);
 
-    // TODO: free all the structures
-    // EVP_PKEY_free(my_dh_private_key);
-    // EVP_PKEY_free(peer_dh_public_key);
+    // free all the structures
+    EVP_PKEY_free(my_dh_private_key);
+    EVP_PKEY_free(peer_dh_public_key);
     EVP_PKEY_CTX_free(derive_ctx);
     EVP_MD_CTX_free(hash_ctx);
 
@@ -370,11 +349,8 @@ int main() {
     return 0;
 }*/
 
-
-
-//DA TOGLIERE XK VECCHIE
+// DA TOGLIERE XK VECCHIE
 unsigned char *prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_len, unsigned char *shared_key, int *ciphertext_len) {
-    // buffer to return
     unsigned char *ciphertext = (unsigned char *)malloc(GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
     *ciphertext_len = GCM_AAD_SIZE + GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
 
@@ -389,7 +365,8 @@ unsigned char *prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_le
     // initialize index in the ciphertext
     int ct_index = 0;
 
-    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag);
+    gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE],
+                tag);
 
     memcpy(&ciphertext[ct_index], iv, GCM_IV_SIZE);
     ct_index += GCM_IV_SIZE;
@@ -404,7 +381,6 @@ unsigned char *prepare_gcm_ciphertext(unsigned char *plaintext, int plaintext_le
 }
 
 unsigned char *extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_len, unsigned char *shared_key, int *plaintext_len) {
-    // Buffer to return
     unsigned char *plaintext = (unsigned char *)malloc(ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE));
     *plaintext_len = ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE);
 
@@ -424,7 +400,8 @@ unsigned char *extract_gcm_ciphertext(unsigned char *ciphertext, int ciphertext_
     memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
 
-    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE, &plaintext[0]);
+    gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key,
+                &iv[0], GCM_IV_SIZE, &plaintext[0]);
 
     return plaintext;
 }
