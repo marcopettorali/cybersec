@@ -40,6 +40,8 @@ void *thread_handler_gaming(void *ptr) {
     printf("[Thread handling game] : Local nickname %s\n", infoToPlay->authenticationInstanceToPlay->nickname_local);
     printf("[Thread handling game] : Opponent nickname %s\n", infoToPlay->authenticationInstanceToPlay->nickname_opponent);
     if (infoToPlay->connection->master == true) {
+        memcpy(infoToPlay->authenticationInstanceToPlay->nickname_master,infoToPlay->authenticationInstanceToPlay->nickname_local,NICKNAME_LENGTH);
+        memcpy(infoToPlay->authenticationInstanceToPlay->nickname_slave,infoToPlay->authenticationInstanceToPlay->nickname_opponent,NICKNAME_LENGTH);
         Message *received_msg = (Message *)malloc(sizeof(Message));
         #if defined VERBOSE_LEVEL
             printf("I'm the master of the game\n");
@@ -105,6 +107,8 @@ void *thread_handler_gaming(void *ptr) {
         #if defined VERBOSE_LEVEL
             printf("I'm the slave\n");
         #endif
+        memcpy(infoToPlay->authenticationInstanceToPlay->nickname_master,infoToPlay->authenticationInstanceToPlay->nickname_opponent,NICKNAME_LENGTH);
+        memcpy(infoToPlay->authenticationInstanceToPlay->nickname_slave,infoToPlay->authenticationInstanceToPlay->nickname_local,NICKNAME_LENGTH);
         Message *received_msg = (Message *)malloc(sizeof(Message));
         infoToPlay->authenticationInstanceToPlay->expected_opcode = M1_CLIENT_CLIENT_AUTH;
 

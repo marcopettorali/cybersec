@@ -47,7 +47,11 @@ typedef struct {
     EVP_PKEY* opponent_pub_key;
     EVP_PKEY* local_priv_key;
     char expected_opcode;
+
     int counter; //TO AVOID REPLAY ATTACK
+    char nickname_master[NICKNAME_LENGTH];
+    char nickname_slave[NICKNAME_LENGTH];
+    unsigned char challenge_to_slave[CHALLENGE_32];
 } AuthenticationInstanceToPlay;
 
 #endif
@@ -55,8 +59,8 @@ typedef struct {
 // opcode
 #define M1_CLIENT_SERVER_AUTH 100          // |100|len|ID_CLIENT ID_server Challenge_S|
 #define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs Challenge_A ID_SERVER ID_CLIENT Challenge_S Yserv EprivKeyServer(ID_SERVER ID_CLIENT Challenge_S Yserv) //send the mex also in clear, then verify
-#define M3_CLIENT_SERVER_AUTH 102          // |102|len|EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)
-#define M4_CLIENT_SERVER_AUTH 103          // |103|len|EKas(ID_SERVER ID_CLIENT CHallengeS)
+#define M3_CLIENT_SERVER_AUTH 102          // |102|len||ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
+#define M4_CLIENT_SERVER_AUTH 103          // |103|len|EKas(ID_SERVER ID_CLIENT)
 #define SUCCESSFUL_CLIENT_SERVER_AUTH 104  // Expected from now on opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
 
 #define M_LISTEN_PORT_CLIENT_P2P 105  // |106|len|EKas(ID_CLIENT ID_SERVER PORT) //No worry about replay since for definition only once sent
@@ -82,7 +86,7 @@ typedef struct {
 #define M2_INFORM_SERVER_GAME_END 119  // |116|len|EKas(NONCE_CLIENT NONCE_SERVER) //server->client
 #define M3_INFORM_SERVER_GAME_END 120  // |116|len|EKas(NONCE_SERVER) //client->server for freshness
 
-#define M1_CLIENT_CLIENT_AUTH 121  // |121|len|ID_LOCAL ID_OPPONENT NONCEa|
+#define M1_CLIENT_CLIENT_AUTH 121  // |121|len|ID_LOCAL ID_OPPONENT NONCEa|  |ID_MASTER ID_SLAVE CHALLENGE_SLAVE|
 #define M2_CLIENT_CLIENT_AUTH 122  // |122|len|EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)
 #define M3_CLIENT_CLIENT_AUTH 123  // |123|len|EpubKOpponent(ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab)
 #define M4_CLIENT_CLIENT_AUTH 124  // |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
