@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define OPCODE_SIZE 1
 #define PAYLOAD_LEN_SIZE sizeof(int)
@@ -17,6 +18,8 @@
 void DEBUG(char* msg, const char* function);
 void EXCEPTION(char* msg, const char* function);
 void handle_msg(int msg);
+
+void secure_input(char* buffer, size_t size);
 
 #define COMMAND_SIZE 128
 #define MSG_OK 1
