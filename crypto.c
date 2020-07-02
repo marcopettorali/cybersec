@@ -61,7 +61,11 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
     // free the context
     EVP_CIPHER_CTX_free(ctx);
 
+<<<<<<< HEAD
     //TEST
+=======
+    TEST
+>>>>>>> 6a845e1dba2acb7a06f92c48d2465baa6c2ce964
 
     return ciphertext_len;
 }
@@ -114,7 +118,11 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     // free the context
     EVP_CIPHER_CTX_cleanup(ctx);
 
+<<<<<<< HEAD
     //TEST
+=======
+    TEST
+>>>>>>> 6a845e1dba2acb7a06f92c48d2465baa6c2ce964
 
     if (ret > 0) {
         plaintext_len += len;
