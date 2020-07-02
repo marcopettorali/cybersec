@@ -478,42 +478,7 @@ void *thread_handler_client(void *ptr) {
                     printf("[%s]: M_REQ_PLAY handled correctly\n",guest_nickname);
                 #endif
 
-                mex_to_send = create_M_RES_PLAY_TO_ACK(authenticationInstance);
-                if(send_MESSAGE(conn->sock,mex_to_send)){
-                    #if defined PROTOCOL_DEBUG
-                        printf("[%s]: M_RES_PLAY_TO_ACK sent\n",authenticationInstance->nickname_client);
-                    #endif
-                    free_MESSAGE(&mex_to_send);
-                }else{
-                    printf("[%s]: Unable to create M_RES_PLAY_TO_ACK\nAbort\n",authenticationInstance->nickname_client);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
                 
-            break;
-
-            case M_RES_PLAY_ACK:
-                //received M_RES_PLAY_ACK
-                //check if expected or not TODO!!!!!!
-                if((authenticationInstance == NULL) || (authenticationInstance->expected_opcode != SUCCESSFUL_CLIENT_AUTHENTICATION_AND_CONFIGURATION)){
-                    printf("[Self-said %s]Unexpected M_RES_PLAY_ACK since NOT YET AUTHENTICATION&CONFIGURATION COMPLETED\nAbort\n",guest_nickname);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-
-                #if defined PROTOCOL_DEBUG
-                    printf("[%s]: Received M_RES_PLAY_ACK\n",guest_nickname);
-                #endif
-
-                if( handler_M_RES_PLAY_ACK(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-                #if defined PROTOCOL_DEBUG
-                    printf("[%s]: M_RES_PLAY_ACK handled correctly\n",guest_nickname);
-                    printf("[%s]: M_RES_PLAY is FRESH\n",guest_nickname);
-                #endif
-
                 printf("[%s]:Nickname to contact -> %s\n",node_of_guest->nickname,authenticationInstance->nickname_opponent_required);
                 result = try_to_challenge(authenticationInstance->nickname_opponent_required,node_of_guest,&adversary_port);
                 printf("[%s]:Has he accepted? %d\n",node_of_guest->nickname,result);
@@ -557,7 +522,6 @@ void *thread_handler_client(void *ptr) {
                 
             break;
 
-
             case M1_INFORM_SERVER_GAME_START:
                 //received M1_INFORM_SERVER_GAME_START
                 //check if expected or not TODO!!!!!!
@@ -580,31 +544,6 @@ void *thread_handler_client(void *ptr) {
                     printf("[%s]: M1_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
                 #endif
 
-                mex_to_send = create_M2_INFORM_SERVER_GAME_START(authenticationInstance);
-                if(send_MESSAGE(conn->sock,mex_to_send)){
-                    #if defined PROTOCOL_DEBUG
-                        printf("[%s]: M2_INFORM_SERVER_GAME_START sent\n",authenticationInstance->nickname_client);
-                    #endif
-                    //free_MESSAGE(&mex_to_send);
-                }else{
-                    printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_START\nAbort\n",authenticationInstance->nickname_client);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-            
-                read_MESSAGE(conn->sock,mex_received);
-                if(mex_received->opcode != M3_INFORM_SERVER_GAME_START){
-                    printf("[%s]:Expected M3_INFORM_SERVER_GAME_START but another mex arrived\nAbort\n",guest_nickname);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-                if( handler_M3_INFORM_SERVER_GAME_START(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-                #if defined PROTOCOL_DEBUG
-                    printf("[%s]: M3_INFORM_SERVER_GAME_START handled correctly\n",guest_nickname);
-                #endif
                 printf("[%s]: The client has started a game. we've to wait till the end\n",guest_nickname);
 
                 do{
@@ -613,36 +552,6 @@ void *thread_handler_client(void *ptr) {
                 
                 #if defined PROTOCOL_DEBUG
                     printf("[%s]:Received M1_INFORM_SERVER_GAME_END\n",guest_nickname);
-                #endif
-
-                mex_to_send = create_M2_INFORM_SERVER_GAME_END(authenticationInstance);
-                
-                if(send_MESSAGE(conn->sock,mex_to_send)){
-                    #if defined PROTOCOL_DEBUG
-                        printf("[%s]: M2_INFORM_SERVER_GAME_END sent\n",authenticationInstance->nickname_client);
-                    #endif
-                    //free_MESSAGE(&mex_to_send);
-                }else{
-                    printf("[%s]: Unable to create M2_INFORM_SERVER_GAME_END\nAbort\n",authenticationInstance->nickname_client);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-
-                read_MESSAGE(conn->sock,mex_received);
-
-                if(mex_received->opcode != M3_INFORM_SERVER_GAME_END){
-                    printf("[%s]:Expected M3_INFORM_SERVER_GAME_END but another mex arrived\nAbort\n",guest_nickname);
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-
-                if( handler_M3_INFORM_SERVER_GAME_END(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
-                    free(authenticationInstance);
-                    goto closing_sock;
-                }
-
-                #if defined PROTOCOL_DEBUG
-                    printf("[%s]: M3_INFORM_SERVER_GAME_END handled correctly\n",guest_nickname);
                 #endif
 
                 //in the meanwhile the server is waiting for the end of game OPCODE
