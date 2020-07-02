@@ -120,12 +120,12 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     }
 }
 
-
-unsigned char *prepare_gcm_ciphertext(char opcode, int *payload_len ,int counter, unsigned char *plaintext, int plaintext_len, unsigned char *shared_key) {
+unsigned char *prepare_gcm_ciphertext(char opcode, int *payload_len, int counter, unsigned char *plaintext, int plaintext_len,
+                                      unsigned char *shared_key) {
     // buffer to return  IV || TAG || Ciphertext
     unsigned char *ciphertext = (unsigned char *)malloc(plaintext_len);
     *payload_len = GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
-    unsigned char * buffer_to_return = (unsigned char *)malloc(*payload_len);
+    unsigned char *buffer_to_return = (unsigned char *)malloc(*payload_len);
 
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
     unsigned char *aad = (unsigned char *)malloc(OPCODE_SIZE + PAYLOAD_LEN_SIZE + GCM_IV_SIZE + COUNTER_SIZE);
@@ -133,7 +133,7 @@ unsigned char *prepare_gcm_ciphertext(char opcode, int *payload_len ,int counter
 
     RAND_poll();
     RAND_bytes(&iv[0], GCM_IV_SIZE);
-    //prepare AAD (opcode,payload_len,IV,counter)
+    // prepare AAD (opcode,payload_len,IV,counter)
     int aad_index = 0;
     memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
     aad_index += OPCODE_SIZE;
@@ -168,8 +168,9 @@ unsigned char *prepare_gcm_ciphertext(char opcode, int *payload_len ,int counter
     return buffer_to_return;
 }
 
-//DA MODIFICARE !!
-unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *payload, int payload_len, unsigned char *shared_key, int *plaintext_len) {
+// DA MODIFICARE !!
+unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *payload, int payload_len, unsigned char *shared_key,
+                                     int *plaintext_len) {
     // PAYLOAD =  IV || TAG || ciphertext
     // Buffer to return
     unsigned char *plaintext = (unsigned char *)malloc(payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
@@ -191,7 +192,7 @@ unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *pa
     memcpy(&ciphertext[0], &payload[payload_index], payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE));
     payload_index += payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE);
 
-    //prepare AAD (opcode,payload_len,IV,counter)
+    // prepare AAD (opcode,payload_len,IV,counter)
     unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
     int aad_index = 0;
     memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
@@ -203,14 +204,15 @@ unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *pa
     memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
     aad_index += COUNTER_SIZE;
 
-    if(gcm_decrypt(ciphertext, payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE, &plaintext[0]) == -1){
+    if (gcm_decrypt(ciphertext, payload_len - (GCM_IV_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0], GCM_IV_SIZE,
+                    &plaintext[0]) == -1) {
         return NULL;
     }
 
     return plaintext;
 }
 
-EVP_PKEY *generate_dh_public_key() {
+EVP_PKEY *generate_dh_public_key(EVP_PKEY**my_dh_private_key, int control) {
     // load EC parameters
     EVP_PKEY_CTX *params_ctx;
     EVP_PKEY *params = NULL;
@@ -233,9 +235,8 @@ EVP_PKEY *generate_dh_public_key() {
         return NULL;
     }
 
-    // create public key
+    // create private key
     EVP_PKEY_CTX *ctx;
-    EVP_PKEY *my_ecdhkey = NULL;
     if (NULL == (ctx = EVP_PKEY_CTX_new(params, NULL))) {
         printf("Error in EVP_PKEY_CTX_new, in the function prepare_dh_public_key()\n");
         return NULL;
@@ -244,20 +245,39 @@ EVP_PKEY *generate_dh_public_key() {
         printf("Error in EVP_PKEY_keygen_init, in the function prepare_dh_public_key()\n");
         return NULL;
     }
-    if (!EVP_PKEY_keygen(ctx, &my_ecdhkey)) {
+    if (!EVP_PKEY_keygen(ctx, &*(my_dh_private_key))) {
         printf("Error in EVP_PKEY_keygen, in the function prepare_dh_public_key()\n");
         return NULL;
     }
+
+    // extract the public key
+    char name[6] = "temp";
+    if (control == 1) {
+        strcat(name, "1");
+    }
+    FILE *temp = fopen(name, "w");
+    if (!temp) {
+        return NULL;
+    }
+    PEM_write_PUBKEY(temp, *(my_dh_private_key));
+    fclose(temp);
+    temp = fopen(name, "r");
+    if (!temp) {
+        return NULL;
+    }
+    EVP_PKEY *my_dh_public_key = PEM_read_PUBKEY(temp, NULL, NULL, NULL);
+    fclose(temp);
+    remove(name);
 
     // free all the structures
     EVP_PKEY_CTX_free(params_ctx);
     EVP_PKEY_free(params);
     EVP_PKEY_CTX_free(ctx);
 
-    return my_ecdhkey;
+    return my_dh_public_key;
 }
 
-unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_dh_public_key, int *shared_key_length) {
+unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_private_key, EVP_PKEY *peer_dh_public_key, int *shared_key_length) {
     // choose the hash algorithm to use
     const EVP_MD *hash_algorithm = EVP_sha256();
 
@@ -266,7 +286,9 @@ unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_d
     unsigned char *shared_secret;
     size_t shared_secret_len;
 
-    if (NULL == (derive_ctx = EVP_PKEY_CTX_new(my_dh_public_key, NULL))) {
+    derive_ctx = EVP_PKEY_CTX_new(my_dh_private_key, NULL);
+
+    if (NULL == derive_ctx) {
         printf("Error in EVP_PKEY_CTX_new, in the function derive_dh_public_key()\n");
         return NULL;
     };
@@ -300,9 +322,9 @@ unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_d
     EVP_DigestUpdate(hash_ctx, (unsigned char *)shared_secret, shared_secret_len);
     EVP_DigestFinal(hash_ctx, shared_secret_digest, &shared_secret_digest_len);
 
-    // free all the structures
-    //EVP_PKEY_free(my_dh_public_key);
-    //EVP_PKEY_free(peer_dh_public_key);
+    // TODO: free all the structures
+    // EVP_PKEY_free(my_dh_private_key);
+    // EVP_PKEY_free(peer_dh_public_key);
     EVP_PKEY_CTX_free(derive_ctx);
     EVP_MD_CTX_free(hash_ctx);
 
@@ -311,22 +333,29 @@ unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_d
 }
 
 int main() {
-    EVP_PKEY* my_dh_pubk = generate_dh_public_key();
-    EVP_PKEY* peer_dh_pubk = generate_dh_public_key();
+    EVP_PKEY *my_dh_private_key = NULL, *peer_dh_private_key = NULL;
+
+    EVP_PKEY *my_dh_public_key = generate_dh_public_key(&my_dh_private_key, 0);
+    EVP_PKEY *peer_dh_public_key = generate_dh_public_key(&peer_dh_private_key, 1);
+
+    printf("private %d\n", my_dh_private_key);
+    BIO_dump_fp(stdout, (const char *)my_dh_private_key, EVP_PKEY_size(my_dh_private_key));
+    printf("public\n");
+    BIO_dump_fp(stdout, (const char *)peer_dh_public_key, EVP_PKEY_size(peer_dh_public_key));
 
     int my_len;
     int peer_len;
-    unsigned char* my_shared_secret = derive_dh_public_key(my_dh_pubk, peer_dh_pubk, &my_len);
-    unsigned char* peer_shared_secret = derive_dh_public_key(peer_dh_pubk, my_dh_pubk, &peer_len);
+    unsigned char *my_shared_secret = derive_dh_public_key(my_dh_private_key, peer_dh_public_key, &my_len);
+    unsigned char *peer_shared_secret = derive_dh_public_key(peer_dh_private_key, my_dh_public_key, &peer_len);
 
-    if(my_len == peer_len && memcmp(my_shared_secret, peer_shared_secret, my_len) == 0){
+    if (my_len == peer_len && memcmp(my_shared_secret, peer_shared_secret, my_len) == 0) {
         printf("ALL OK!!\n");
-    }else{
+    } else {
         printf("mine\n");
-        BIO_dump_fp(stdout, (const char*) my_shared_secret, my_len);
+        BIO_dump_fp(stdout, (const char *)my_shared_secret, my_len);
         printf("peer's\n");
-        BIO_dump_fp(stdout, (const char*) peer_shared_secret, peer_len);
+        BIO_dump_fp(stdout, (const char *)peer_shared_secret, peer_len);
     }
-    
+
     return 0;
 }
