@@ -55,3 +55,11 @@ void safe(char* msg) {
     printf("%s\n", msg);
     printf("\033[0m");
 }
+
+void secure_input(char* buffer, size_t size){
+    fgets(buffer, size, stdin);
+    char *p = strchr(buffer, '\n');
+    if(p){
+        *p = '\0';
+    }
+}

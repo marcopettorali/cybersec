@@ -5,6 +5,8 @@
 
 #include "util.h"
 
+#define TEST BIO_dump_fp(stdout, (const char *)aad, aad_len);
+
 int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad, int aad_len, unsigned char *key, unsigned char *iv, int iv_len,
                 unsigned char *ciphertext, unsigned char *tag) {
     // create context
@@ -58,6 +60,9 @@ int gcm_encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *aad,
 
     // free the context
     EVP_CIPHER_CTX_free(ctx);
+
+    TEST
+
     return ciphertext_len;
 }
 
@@ -109,6 +114,8 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
     // free the context
     EVP_CIPHER_CTX_cleanup(ctx);
 
+    TEST
+
     if (ret > 0) {
         plaintext_len += len;
         return plaintext_len;
@@ -120,10 +127,10 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *aa
 }
 
 // DA MODIFICARE !!
-unsigned char *prepare_gcm_ciphertext_new(char opcode, int *payload_len, int counter, unsigned char *plaintext, int plaintext_len,
+unsigned char *prepare_gcm_ciphertext_new(char opcode, int *ciphertext_len, int counter, unsigned char *plaintext, int plaintext_len,
                                           unsigned char *shared_key) {
     unsigned char *ciphertext = (unsigned char *)malloc(GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
-    *payload_len = GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
+    *ciphertext_len = GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len;
 
     unsigned char *aad = (unsigned char *)malloc(GCM_AAD_SIZE);
 
@@ -136,9 +143,9 @@ unsigned char *prepare_gcm_ciphertext_new(char opcode, int *payload_len, int cou
     int aad_index = 0;
     memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
     aad_index += OPCODE_SIZE;
-    memcpy(&aad[aad_index], &payload_len[0], PAYLOAD_LEN_SIZE);
+    memcpy(&aad[aad_index], ciphertext_len, PAYLOAD_LEN_SIZE);
     aad_index += PAYLOAD_LEN_SIZE;
-    memcpy(&aad[aad_index], &iv[0], GCM_IV_SIZE);
+    memcpy(&aad[aad_index], iv, GCM_IV_SIZE);
     aad_index += GCM_IV_SIZE;
     memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
     aad_index += COUNTER_SIZE;
@@ -146,16 +153,19 @@ unsigned char *prepare_gcm_ciphertext_new(char opcode, int *payload_len, int cou
     // initialize index in the ciphertext
     int ct_index = 0;
 
-    if (gcm_encrypt(&plaintext[0], plaintext_len, aad, GCM_AAD_SIZE, shared_key, iv, GCM_IV_SIZE,
-                    &ciphertext[GCM_IV_SIZE + GCM_AAD_SIZE + GCM_TAG_SIZE], tag) == -1) {
+    if (gcm_encrypt(&plaintext[0], plaintext_len, &aad[0], GCM_AAD_SIZE, shared_key, &iv[0], GCM_IV_SIZE, &ciphertext[GCM_IV_SIZE + GCM_TAG_SIZE], &tag[0]) ==
+        -1) {
         return NULL;
     }
 
-    memcpy(&ciphertext[ct_index], &iv[0], GCM_IV_SIZE);
+    memcpy(&ciphertext[ct_index], iv, GCM_IV_SIZE);
     ct_index += GCM_IV_SIZE;
 
-    memcpy(&ciphertext[ct_index], &tag[0], GCM_TAG_SIZE);
+    memcpy(&ciphertext[ct_index], tag, GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
+
+    printf("PREPARE:\n");
+    BIO_dump_fp(stdout, (const char *)&ciphertext[0], GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
 
     return ciphertext;
 }
@@ -171,17 +181,6 @@ unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *ci
     unsigned char *iv = (unsigned char *)malloc(GCM_IV_SIZE);
     unsigned char *tag = (unsigned char *)malloc(GCM_TAG_SIZE);
 
-    // prepare AAD (opcode,payload_len,IV,counter)
-    int aad_index = 0;
-    memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
-    aad_index += OPCODE_SIZE;
-    memcpy(&aad[aad_index], &ciphertext_len, PAYLOAD_LEN_SIZE);
-    aad_index += PAYLOAD_LEN_SIZE;
-    memcpy(&aad[aad_index], &iv[0], GCM_IV_SIZE);
-    aad_index += GCM_IV_SIZE;
-    memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
-    aad_index += COUNTER_SIZE;
-
     // initialize index in the ciphertext
     int ct_index = 0;
 
@@ -190,6 +189,18 @@ unsigned char *extract_gcm_plaintext(char opcode, int counter, unsigned char *ci
 
     memcpy(&tag[0], &ciphertext[ct_index], GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
+
+    // prepare AAD (opcode,payload_len,IV,counter)
+    int aad_index = 0;
+    memcpy(&aad[aad_index], &opcode, OPCODE_SIZE);
+    aad_index += OPCODE_SIZE;
+    memcpy(&aad[aad_index], &ciphertext_len, PAYLOAD_LEN_SIZE);
+    aad_index += PAYLOAD_LEN_SIZE;
+    memcpy(&aad[aad_index], iv, GCM_IV_SIZE);
+    aad_index += GCM_IV_SIZE;
+    memcpy(&aad[aad_index], &counter, COUNTER_SIZE);
+    aad_index += COUNTER_SIZE;
+
 
     if (gcm_decrypt(&ciphertext[ct_index], ciphertext_len - (GCM_IV_SIZE + GCM_TAG_SIZE), &aad[0], GCM_AAD_SIZE, &tag[0], shared_key, &iv[0],
                     GCM_IV_SIZE, &plaintext[0]) == -1) {
@@ -318,33 +329,19 @@ unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_private_key, EVP_PKEY *peer_
     *shared_key_length = shared_secret_digest_len;
     return shared_secret_digest;
 }
-/*
-int main() {
-    EVP_PKEY *my_dh_private_key = NULL, *peer_dh_private_key = NULL;
 
-    EVP_PKEY *my_dh_public_key = generate_dh_public_key(&my_dh_private_key, 0);
-    EVP_PKEY *peer_dh_public_key = generate_dh_public_key(&peer_dh_private_key, 1);
+/*int main() {
+    int payload_len, plaintext_len;
+    unsigned char *plaintext = (unsigned char *)malloc(10);
+    memcpy(&plaintext[0], "BELLARAGA", 10);
+    unsigned char *shared_key = (unsigned char *)malloc(128);
+    memcpy(&shared_key[0],
+           "SHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDKEYSHAREDSHAR", 128);
 
-    printf("private %d\n", my_dh_private_key);
-    BIO_dump_fp(stdout, (const char *)my_dh_private_key, EVP_PKEY_size(my_dh_private_key));
-    printf("public\n");
-    BIO_dump_fp(stdout, (const char *)peer_dh_public_key, EVP_PKEY_size(peer_dh_public_key));
+    unsigned char *ciphertext = prepare_gcm_ciphertext_new(2, &payload_len, 1, &plaintext[0], 10, &shared_key[0]);
+    unsigned char *received_pt = extract_gcm_plaintext(2, 1, &ciphertext[0], payload_len, &shared_key[0], &plaintext_len);
 
-    int my_len;
-    int peer_len;
-    unsigned char *my_shared_secret = derive_dh_public_key(my_dh_private_key, peer_dh_public_key, &my_len);
-    unsigned char *peer_shared_secret = derive_dh_public_key(peer_dh_private_key, my_dh_public_key, &peer_len);
-
-    printf("my_len %d\n",my_len);
-
-    if (my_len == peer_len && memcmp(my_shared_secret, peer_shared_secret, my_len) == 0) {
-        printf("ALL OK!!\n");
-    } else {
-        printf("mine\n");
-        BIO_dump_fp(stdout, (const char *)my_shared_secret, my_len);
-        printf("peer's\n");
-        BIO_dump_fp(stdout, (const char *)peer_shared_secret, peer_len);
-    }
+    printf("MESSAGE: %s\n", received_pt);
 
     return 0;
 }*/

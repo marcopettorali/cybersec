@@ -203,7 +203,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         memset(buffer, 0, COMMAND_SIZE);
         memset(command, 0, COMMAND_SIZE);
         printf("Insert server address -> ");
-        fgets(buffer, COMMAND_SIZE, stdin);
+        secure_input(buffer, COMMAND_SIZE);
         sscanf(buffer, "%s", command);
         host = gethostbyname(command);
         if (!host) {
@@ -212,7 +212,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         }
         memset(buffer, 0, COMMAND_SIZE);
         printf("Insert server port -> ");
-        fgets(buffer, COMMAND_SIZE, stdin);
+        secure_input(buffer, COMMAND_SIZE);
         if (sscanf(buffer, "%d", &port) <= 0 || port <= 0) {
             printf("Port not valid: retry\n");
             continue;
@@ -394,7 +394,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                     // printf("The user has inserted something\n");
                     memset(buffer, 0, COMMAND_SIZE);
                     memset(command, 0, COMMAND_SIZE);
-                    fgets(buffer, COMMAND_SIZE, stdin);
+                    secure_input(buffer, COMMAND_SIZE);
                     sscanf(buffer, "%s", command);
 
                     if (strcmp(command, "list") == 0) {
@@ -443,7 +443,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         printf("Insert the adversary username -> ");
 
                         char username_opponent[NICKNAME_LENGTH];
-                        fgets(username_opponent, NICKNAME_LENGTH, stdin);
+                        secure_input(username_opponent, NICKNAME_LENGTH);
                         username_opponent[NICKNAME_LENGTH - 1] = '\0';
 
                         mex = create_M_REQ_PLAY(username_opponent, authenticationInstance);
@@ -784,6 +784,8 @@ int main(int argc, char **argv) {
     char *command = (char *)malloc(COMMAND_SIZE);
     int port_p2p;
 
+    printf("COMMAND = %s\n", buffer);
+
     /* check for command line arguments */
     if (argc != 2) {
         fprintf(stderr, "usage: %s port\n", argv[0]);
@@ -808,7 +810,7 @@ int main(int argc, char **argv) {
         memset(command, 0, COMMAND_SIZE);
 
         // read commands from user's input
-        fgets(buffer, COMMAND_SIZE, stdin);
+        secure_input(buffer, COMMAND_SIZE);
         sscanf(buffer, "%s", command);
 
         // decode the inserted command and handle msgs
