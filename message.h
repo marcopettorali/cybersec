@@ -49,8 +49,8 @@ typedef struct {
 #endif
 
 // opcode
-#define M1_CLIENT_SERVER_AUTH 100          // |100|len|ID_CLIENT ID_server NONCEa|
-#define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs EpubKa(ID_SERVER ID_CLIENT NONCEa CHallengeA)
+#define M1_CLIENT_SERVER_AUTH 100          // |100|len|ID_CLIENT ID_server Challenge_S|
+#define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs Challenge_A ID_SERVER ID_CLIENT Challenge_S Yserv EprivKeyServer(ID_SERVER ID_CLIENT Challenge_S Yserv) //send the mex also in clear, then verify
 #define M3_CLIENT_SERVER_AUTH 102          // |102|len|EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)
 #define M4_CLIENT_SERVER_AUTH 103          // |103|len|EKas(ID_SERVER ID_CLIENT CHallengeS)
 #define SUCCESSFUL_CLIENT_SERVER_AUTH 104  // Expected from now on opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
