@@ -52,14 +52,17 @@ typedef struct {
     char nickname_master[NICKNAME_LENGTH];
     char nickname_slave[NICKNAME_LENGTH];
     unsigned char challenge_to_slave[CHALLENGE_32];
+    unsigned char challenge_to_master[CHALLENGE_32];
+    EVP_PKEY *my_dh_private_key;
+    EVP_PKEY *peer_dh_pub_key;
 } AuthenticationInstanceToPlay;
 
 #endif
 
 // opcode
 #define M1_CLIENT_SERVER_AUTH 100          // |100|len|ID_CLIENT ID_server Challenge_S|
-#define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs Challenge_A ID_SERVER ID_CLIENT Challenge_S Yserv EprivKeyServer(ID_SERVER ID_CLIENT Challenge_S Yserv) //send the mex also in clear, then verify
-#define M3_CLIENT_SERVER_AUTH 102          // |102|len||ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
+#define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs Challenge_A ID_SERVER ID_CLIENT Challenge_S Yserv Sign_size EprivKeyServer(ID_SERVER ID_CLIENT Challenge_S Yserv) //send the mex also in clear, then verify
+#define M3_CLIENT_SERVER_AUTH 102          // |102|len|ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
 #define M4_CLIENT_SERVER_AUTH 103          // |103|len|EKas(ID_SERVER ID_CLIENT)
 #define M5_CLIENT_SERVER_AUTH 60           // |103|len|EKas(ID_SERVER ID_CLIENT)
 #define SUCCESSFUL_CLIENT_SERVER_AUTH 104  // Expected from now on opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
@@ -87,10 +90,11 @@ typedef struct {
 #define M2_INFORM_SERVER_GAME_END 119  // |116|len|EKas(NONCE_CLIENT NONCE_SERVER) //server->client
 #define M3_INFORM_SERVER_GAME_END 120  // |116|len|EKas(NONCE_SERVER) //client->server for freshness
 
-#define M1_CLIENT_CLIENT_AUTH 121  // |121|len|ID_LOCAL ID_OPPONENT NONCEa|  |ID_MASTER ID_SLAVE CHALLENGE_SLAVE|
-#define M2_CLIENT_CLIENT_AUTH 122  // |122|len|EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)
-#define M3_CLIENT_CLIENT_AUTH 123  // |123|len|EpubKOpponent(ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab)
-#define M4_CLIENT_CLIENT_AUTH 124  // |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
+#define M1_CLIENT_CLIENT_AUTH 121  // |121|len|ID_MASTER ID_SLAVE CHALLENGE_S|  |ID_MASTER ID_SLAVE CHALLENGE_SLAVE|
+#define M2_CLIENT_CLIENT_AUTH 122  // |122|len|Challenge_M ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave Sign_size EprivKeyServer(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+#define M3_CLIENT_CLIENT_AUTH 123  // |123|len|ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
+#define M4_CLIENT_CLIENT_AUTH 124  // |124|len|EKas(ID_MASTER ID_CLIENT)
+#define M5_CLIENT_CLIENT_AUTH 40  //  |40 |len|EKas(ID_MASTER ID_CLIENT)
 #define SUCCESSFUL_CLIENT_CLIENT_AUTH 125
 
 #define M_CLOSE 126  // |120|len|EKas(Kas) //No worry about replay since for definition only once sent (Kas is to add something otherwise if only opcode everybody could send it to ruin the game)
@@ -175,6 +179,10 @@ bool get_and_verify_info_M3_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
 Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance);
 int handler_M4_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance);
 bool get_and_verify_info_M4_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance);
+
+Message* create_M5_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance);
+int handler_M5_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance);
+bool get_and_verify_info_M5_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance);
 
 // CODICE_MARCO_END
 

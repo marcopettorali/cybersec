@@ -3225,41 +3225,57 @@ bool get_and_verify_info_M1_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
 }
 //Da modificare
 Message* create_M2_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
-    // Mex format |101|len|EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)
-
+    // Mex format |101|len|Challenge_M ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave EprivKeyServer(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+    //slave side
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
 
     mex->opcode = (char)M2_CLIENT_CLIENT_AUTH;
 
-    // generate challenge for client CHa
-    unsigned char* challenge = (unsigned char*)malloc(CHALLENGE_32);
-    generate_nonce(&challenge, CHALLENGE_32);
-    memcpy(authInstance->challenge_to_opponent, challenge, CHALLENGE_32);
-    free(challenge);
+    // generate challenge for client CHmaster
+    unsigned char* challenge_to_master = (unsigned char*)malloc(CHALLENGE_32);
+    generate_nonce(&challenge_to_master, CHALLENGE_32);
+    memcpy(authInstance->challenge_to_master, challenge_to_master, CHALLENGE_32);
+    free(challenge_to_master);
 
-    // Start creating plaintext |ID_LOCAL ID_OPPONENT NONCEa CHallengeA|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH + NICKNAME_LENGTH + NONCE_32 + CHALLENGE_32);
+    //Get DH params
+    EVP_PKEY *my_dh_private_key = NULL;
+    EVP_PKEY *my_dh_public_key = generate_dh_public_key(&my_dh_private_key, 0);
+    //int my_dh_publick_key_size = EVP_PKEY_size(my_dh_public_key);
+    //printf("my_dh_publick_key_size %d\n",my_dh_publick_key_size);
+    //upload values in authInstance
+    authInstance->my_dh_private_key = my_dh_private_key;
+
+    //Serialize Pub_Key
+    unsigned char* pub_key_buffer = NULL;
+    int lenght_pub_key = serialize_PEM_Pub_Key(my_dh_public_key, &pub_key_buffer);
+
+    // Start creating plaintext for EprivKeyServer(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + lenght_pub_key);
     int pt_byte_index = 0;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_local, NICKNAME_LENGTH);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_slave, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_opponent, NICKNAME_LENGTH);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_master, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_opponent, NONCE_32);
-    pt_byte_index += NONCE_32;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_opponent, CHALLENGE_32);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_slave, CHALLENGE_32);
     pt_byte_index += CHALLENGE_32;
+    
+    memcpy(&(plaintext_buffer[pt_byte_index]), &lenght_pub_key, sizeof(int));
+    pt_byte_index += sizeof(int);
+    
+    memcpy(&(plaintext_buffer[pt_byte_index]), pub_key_buffer, lenght_pub_key);
+    pt_byte_index += lenght_pub_key;
 
-    // get ciphertext EpubKeyClient
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = get_asymmetric_encrypted_digital_envelope(plaintext_buffer, pt_byte_index, authInstance->opponent_pub_key, &ciphertext_and_info_buf_size);
-    if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext EpubKeyClient\n");
+    // get digital_signature
+    int signature_size;
+    unsigned char* signature = get_signature(plaintext_buffer, pt_byte_index, authInstance->local_priv_key, &signature_size);
+    if (signature == NULL) {
+        printf("Error: Unable to create signature in M2_CLIENT_CLIENT_AUTH\n");
         return NULL;
     }
 
@@ -3267,17 +3283,40 @@ Message* create_M2_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
     // to debug
     // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
 
+    //|Challenge_M ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave Sign_size EprivKeyServer(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(sizeof(int) + ciphertext_and_info_buf_size);  // POSTPONED AFTER EpubKa(..)
+    mex->payload = (unsigned char*)malloc(CHALLENGE_32 + 2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + lenght_pub_key + sizeof(int) + signature_size);  // POSTPONED AFTER EpubKa(..)
 
-    // creating payload |.. EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
+    // Start creating payload |Challenge_M ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave Sign_size EprivKeyServer(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+
+    memcpy(&(mex->payload[byte_index]), authInstance->challenge_to_master, CHALLENGE_32);
+    byte_index += CHALLENGE_32;
+
+    memcpy(&(mex->payload[byte_index]), authInstance->nickname_slave, NICKNAME_LENGTH);
+    byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(mex->payload[byte_index]), authInstance->nickname_master, NICKNAME_LENGTH);
+    byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(mex->payload[byte_index]), authInstance->challenge_to_slave, CHALLENGE_32);
+    byte_index += CHALLENGE_32;
+    
+    memcpy(&(mex->payload[byte_index]), &lenght_pub_key, sizeof(int));
+    byte_index += sizeof(int);
+    
+    memcpy(&(mex->payload[byte_index]), pub_key_buffer, lenght_pub_key);
+    byte_index += lenght_pub_key;
+
+    memcpy(&(mex->payload[byte_index]), &signature_size, sizeof(int));
+    byte_index += sizeof(int);
+
+    memcpy(&(mex->payload[byte_index]), signature, signature_size);
+    byte_index += signature_size;
 
     mex->payload_len = byte_index;
 
     // FREE STUFF!!!
-    free(ciphertext_and_info_buf);
+    free(signature);
 
     // update values in authInstance
     authInstance->expected_opcode = M3_CLIENT_CLIENT_AUTH;
@@ -3286,20 +3325,65 @@ Message* create_M2_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
 }
 
 int handler_M2_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance, EVP_PKEY* privkey) {
-    // Format mex |101|len|EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)
+    // Format mex |op|len|Challenge_M ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave Sign_size EprivKeySlave(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+    
+    //master side
+    // initialize index in the payload
+    int pd_index = 0;
 
-    // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
-    int plaintext_size;
-    unsigned char* plaintext = get_asymmetric_decrypted_digital_envelope(ciphertext, ciphertext_size, privkey, &plaintext_size);
-    if (plaintext == NULL) {
-        printf("Error in decryption digital envelope\nAbort\n");
+    //get Challenge_M
+    memcpy(authInstance->challenge_to_master,&(payload[pd_index]), CHALLENGE_32);
+    pd_index += CHALLENGE_32;
+
+    //get Yserv_len
+    int Yserv_len;
+    memcpy(&Yserv_len,&(payload[pd_index + 2 * NICKNAME_LENGTH + CHALLENGE_32]), sizeof(int));
+    
+    //|op|len|.. ID_SLAVE ID_MASTER Challenge_S Yserv_len Yserv .. Sign_size EprivKeySlave(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+    int bs_byte_index = 0;
+    unsigned char* buffer_signed = (unsigned char*)malloc(2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + Yserv_len);
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , NICKNAME_LENGTH);
+    bs_byte_index += NICKNAME_LENGTH;
+    pd_index += NICKNAME_LENGTH;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , NICKNAME_LENGTH);
+    bs_byte_index += NICKNAME_LENGTH;
+    pd_index += NICKNAME_LENGTH;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , CHALLENGE_32);
+    bs_byte_index += CHALLENGE_32;
+    pd_index += CHALLENGE_32;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , sizeof(int));
+    bs_byte_index += sizeof(int);
+    pd_index += sizeof(int);
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , Yserv_len);
+    bs_byte_index += Yserv_len;
+    pd_index += Yserv_len;
+
+    //get the signature |.. Sign_size EprivKeySlave(ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave)
+    int sign_size;
+    memcpy(&sign_size, &(payload[pd_index]), sizeof(int));
+    pd_index += sizeof(int);
+
+    unsigned char* signature_to_verify = (unsigned char*)malloc(sign_size);
+    memcpy(signature_to_verify, &(payload[pd_index]), sign_size);
+    pd_index += sign_size;
+
+    // verify signature 
+    bool verified = verify_signature(buffer_signed,bs_byte_index,signature_to_verify,sign_size,authInstance->opponent_pub_key);
+    
+    if (verified == false) {
+        printf("Error in verify signature\nAbort\n");
         return 0;
     }
-    // extract and verify info in plaintext
-    if (get_and_verify_info_M2_CLIENT_CLIENT_AUTH(plaintext, authInstance) == false) {
-        printf("Not consistent info received in M2 auth protocol\nAbort\n");
+
+    printf("Successufl verification of sign\n");
+    // extract and verify info in buffer_signed
+    if (get_and_verify_info_M2_CLIENT_CLIENT_AUTH(buffer_signed, authInstance) == false) {
+        printf("Not consistent info received in M2_CLIENT_CLIENT_AUTH\nAbort\n");
         return 0;
     }
 
@@ -3307,96 +3391,308 @@ int handler_M2_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
 }
 
 bool get_and_verify_info_M2_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
-    // ID_LOCAL ID_OPPONENT NONCEa CHallengeA
-    // declare buffer
-    unsigned char* sender_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* receiver_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_master_rec = (unsigned char*)malloc(NONCE_32);
-    unsigned char* challenge_to_master_rec = (unsigned char*)malloc(CHALLENGE_32);
+    // declare buffer ID_SLAVE ID_MASTER Challenge_S Yslave_len Yslave
+    unsigned char* slave_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* master_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* challenge_to_slave_rec = (unsigned char*)malloc(CHALLENGE_32);
+    int Yserv_len;
 
     int pt_byte_index = 0;
 
-    memcpy(sender_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    memcpy(slave_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(receiver_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    memcpy(master_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(nonce_master_rec, &(plaintext[pt_byte_index]), NONCE_32);
-    pt_byte_index += NONCE_32;
-
-    memcpy(challenge_to_master_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
+    memcpy(challenge_to_slave_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
     pt_byte_index += CHALLENGE_32;
 
-    if (strncmp(authInstance->nickname_local, (char*)receiver_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch local nickname in M2\n");
+    memcpy(&Yserv_len, &(plaintext[pt_byte_index]), sizeof(int));
+    pt_byte_index += sizeof(int);
+
+    //memcpy(authInstance->peer_dh_pub_key, &(plaintext[pt_byte_index]), Yserv_len);
+    //pt_byte_index += Yserv_len;
+    
+    authInstance->peer_dh_pub_key = deserialize_PEM_Pub_Key(Yserv_len, &(plaintext[pt_byte_index]));
+
+    //BIO_dump_fp(stdout, (const char *)authInstance->peer_dh_pub_key, Yserv_len);
+    //BIO_dump_fp(stdout, (const char *)authInstance->peer_dh_pub_key, EVP_PKEY_size(authInstance->peer_dh_pub_key));
+
+    if (strncmp(authInstance->nickname_slave, (char*)slave_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch slave nickname in M2\n");
         return false;
     }
-    if (strncmp(authInstance->nickname_opponent, (char*)sender_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch opponent nickname in M2\n");
+    if (strncmp(authInstance->nickname_master, (char*)master_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch master nickname in M2\n");
         return false;
     }
-    if (memcmp(authInstance->nonce_local, nonce_master_rec, NONCE_32) != 0) {
-        printf("Mismatch nonce in M2\n");
+    if (memcmp(authInstance->challenge_to_slave, challenge_to_slave_rec, CHALLENGE_32) != 0) {
+        printf("Mismatch challenge in M2\n");
         return false;
     }
 
-    memcpy(authInstance->challenge_to_local, challenge_to_master_rec, CHALLENGE_32);
-
-    free(sender_nickname_rec);
-    free(receiver_nickname_rec);
-    free(nonce_master_rec);
-    free(challenge_to_master_rec);
+    free(slave_nickname_rec);
+    free(master_nickname_rec);
+    free(challenge_to_slave_rec);
 
     return true;
 }
 
 Message* create_M3_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
-    // Mex format |123|len|EpubKOpponent(ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab)
-
+    // Mex format |123|len|ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster Sign_size EprivKeyClient(ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster)|
+//Master side
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
 
     mex->opcode = (char)M3_CLIENT_CLIENT_AUTH;
 
-    // generate challenge for opponent CHb
-    unsigned char* challenge = (unsigned char*)malloc(CHALLENGE_32);
-    generate_nonce(&challenge, CHALLENGE_32);
-    memcpy(authInstance->challenge_to_opponent, challenge, CHALLENGE_32);
-    free(challenge);
+    //Get DH params
+    EVP_PKEY *my_dh_private_key = NULL;
+    EVP_PKEY *my_dh_public_key = generate_dh_public_key(&my_dh_private_key, 0);
+    //upload values in authInstance
+    authInstance->my_dh_private_key = my_dh_private_key;
 
-    // generate symmetric key Kab
-    unsigned char* symmetric_key = (unsigned char*)malloc(GCM_KEY_SIZE);
-    generate_symmetric_key(&symmetric_key, GCM_KEY_SIZE);  // on 128 bit
-    memcpy(authInstance->symmetric_key, symmetric_key, GCM_KEY_SIZE);
-    memset(symmetric_key, 0, GCM_KEY_SIZE);
-    free(symmetric_key);
+    //Serialize Pub_Key
+    unsigned char* pub_key_buffer = NULL;
+    int lenght_pub_key = serialize_PEM_Pub_Key(my_dh_public_key, &pub_key_buffer);
 
-    // Start creating plaintext |ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH + NICKNAME_LENGTH + 2 * CHALLENGE_32 + GCM_KEY_SIZE);
+    // Start creating plaintext for |EprivKeyClient(ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster)|
+
+    unsigned char* plaintext_buffer = (unsigned char*)malloc( 2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + lenght_pub_key);
     int pt_byte_index = 0;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_local, NICKNAME_LENGTH);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_master, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_opponent, NICKNAME_LENGTH);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_slave, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_local, CHALLENGE_32);
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_master, CHALLENGE_32);
     pt_byte_index += CHALLENGE_32;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_opponent, CHALLENGE_32);
+    memcpy(&(plaintext_buffer[pt_byte_index]), &lenght_pub_key, sizeof(int));
+    pt_byte_index += sizeof(int);
+    
+    memcpy(&(plaintext_buffer[pt_byte_index]), pub_key_buffer, lenght_pub_key);
+    pt_byte_index += lenght_pub_key;
+
+    // get digital_signature
+    int signature_size;
+    unsigned char* signature = get_signature(plaintext_buffer, pt_byte_index, authInstance->local_priv_key, &signature_size);
+    if (signature == NULL) {
+        printf("Error: Unable to create signature in M3_CLIENT_CLIENT_AUTH\n");
+        return NULL;
+    }
+
+    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    // to debug
+    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+
+    //|ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster Sign_size EprivKeyClient(ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster)|
+    // Allocating enough space for the payload
+    mex->payload = (unsigned char*)malloc( 2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + lenght_pub_key + sizeof(int) + signature_size);  // POSTPONED AFTER EpubKa(..)
+
+    // Start creating payload |ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
+
+    memcpy(&(mex->payload[byte_index]), plaintext_buffer, pt_byte_index);
+    byte_index += pt_byte_index;
+
+    /*memcpy(&(mex->payload[byte_index]), authInstance->nickname_client, NICKNAME_LENGTH);
+    byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(mex->payload[byte_index]), NICKNAME_SERVER, sizeof(NICKNAME_SERVER)); da modificare eventualmente
+    byte_index += sizeof(NICKNAME_SERVER);
+
+    memcpy(&(mex->payload[byte_index]), authInstance->challenge_to_client, CHALLENGE_32);
+    byte_index += CHALLENGE_32;
+    
+    memcpy(&(mex->payload[byte_index]), &lenght_pub_key, sizeof(int));
+    byte_index += sizeof(int);
+    
+    memcpy(&(mex->payload[byte_index]), pub_key_buffer , lenght_pub_key);
+    byte_index += lenght_pub_key;*/
+
+    memcpy(&(mex->payload[byte_index]), &signature_size, sizeof(int));
+    byte_index += sizeof(int);
+
+    memcpy(&(mex->payload[byte_index]), signature, signature_size);
+    byte_index += signature_size;
+
+    mex->payload_len = byte_index;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(signature);
+
+    // update values in authInstance
+    authInstance->expected_opcode = (char)M4_CLIENT_CLIENT_AUTH;
+
+    return mex;
+}
+
+int handler_M3_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance, EVP_PKEY* privkey) {
+    // Format mex |123|len|ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster Sign_size EprivKeyClient(ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster)|
+
+    //get Yserv_len
+    int Ymaster_len;
+    memcpy(&Ymaster_len,&(payload[2 * NICKNAME_LENGTH + CHALLENGE_32]), sizeof(int));
+
+    int bs_byte_index = 0;
+    unsigned char* buffer_signed = (unsigned char*)malloc(2 * NICKNAME_LENGTH + CHALLENGE_32 + sizeof(int) + Ymaster_len);
+
+    int pd_index = 0;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , NICKNAME_LENGTH);
+    bs_byte_index += NICKNAME_LENGTH;
+    pd_index += NICKNAME_LENGTH;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , NICKNAME_LENGTH);
+    bs_byte_index += NICKNAME_LENGTH;
+    pd_index += NICKNAME_LENGTH;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , CHALLENGE_32);
+    bs_byte_index += CHALLENGE_32;
+    pd_index += CHALLENGE_32;
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , sizeof(int));
+    bs_byte_index += sizeof(int);
+    pd_index += sizeof(int);
+
+    memcpy(&(buffer_signed[bs_byte_index]), &(payload[pd_index]) , Ymaster_len);
+    bs_byte_index += Ymaster_len;
+    pd_index += Ymaster_len;
+
+    //get the signature |.. Sign_size EprivKeyClient(ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster)|
+    int sign_size;
+    memcpy(&sign_size, &(payload[pd_index]), sizeof(int));
+    pd_index += sizeof(int);
+
+    unsigned char* signature_to_verify = (unsigned char*)malloc(sign_size);
+    memcpy(signature_to_verify, &(payload[pd_index]), sign_size);
+    pd_index += sign_size;
+
+    //BIO_dump_fp(stdout, (const char *)buffer_signed, bs_byte_index);
+    //BIO_dump_fp(stdout, (const char *)signature_to_verify, bs_bysign_sizete_index);
+
+    // verify signature 
+    bool verified = verify_signature(buffer_signed,bs_byte_index,signature_to_verify,sign_size,authInstance->opponent_pub_key);
+  
+    if (verified == false) {
+        printf("Error in verify signature\nAbort\n");
+        return 0;
+    }
+
+    printf("Successufl verification of signature\n");
+    // extract and verify info in buffer_signed
+
+    if (get_and_verify_info_M3_CLIENT_CLIENT_AUTH(buffer_signed, authInstance) == false) {
+        printf("Not consistent info received in M3_CLIENT_CLIENT_AUTH\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M3_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
+    // declare buffer ID_MASTER ID_SLAVE Challenge_M Ymaster_len Ymaster
+    unsigned char* master_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* slave_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* challenge_to_master_rec = (unsigned char*)malloc(CHALLENGE_32);
+    int Yclient_len;
+
+    int pt_byte_index = 0;
+
+    memcpy(master_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(slave_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(challenge_to_master_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
     pt_byte_index += CHALLENGE_32;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->symmetric_key, GCM_KEY_SIZE);
-    pt_byte_index += GCM_KEY_SIZE;
+    memcpy(&Yclient_len, &(plaintext[pt_byte_index]), sizeof(int));
+    pt_byte_index += sizeof(int);
 
-    // get ciphertext EpubKeyServer
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = get_asymmetric_encrypted_digital_envelope(plaintext_buffer, pt_byte_index, authInstance->opponent_pub_key, &ciphertext_and_info_buf_size);
+    //memcpy(authInstance->peer_dh_pub_key, &(plaintext[pt_byte_index]), Yserv_len);
+    //pt_byte_index += Yserv_len;
+    authInstance->peer_dh_pub_key = deserialize_PEM_Pub_Key(Yclient_len, &(plaintext[pt_byte_index]));
+
+
+    if (strncmp(authInstance->nickname_master, (char*)master_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch master nickname in M3\n");
+        return false;
+    }
+    if (strncmp(authInstance->nickname_slave, (char*)slave_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch slave nickname in M3\n");
+        return false;
+    }
+    if (memcmp(authInstance->challenge_to_master, challenge_to_master_rec, CHALLENGE_32) != 0) {
+        printf("Mismatch challenge_to_master in M3\n");
+        return false;
+    }
+
+    free(master_nickname_rec);
+    free(slave_nickname_rec);
+    free(challenge_to_master_rec);
+
+    return true;
+}
+
+Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
+    // Mex format |124|len||EKas(ID_MASTER ID_SLAVE)|
+
+    int byte_index = 0;
+    // create returning mex
+    Message* mex = (Message*)malloc(sizeof(Message));
+
+    mex->opcode = (char)M4_CLIENT_CLIENT_AUTH;
+
+    // Start creating plaintext |EKas(ID_MASTER ID_SLAVE)|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(2 * NICKNAME_LENGTH);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_master, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_slave, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    //generate Kas
+    int symmetric_key_len;
+    unsigned char *symmetric_key = derive_dh_public_key(authInstance->my_dh_private_key, authInstance->peer_dh_pub_key, &symmetric_key_len);
+    //printf("symmetric_key_len %d\n",symmetric_key_len);
+BIO_dump_fp(stdout, (const char *)symmetric_key, symmetric_key_len);
+    memcpy(authInstance->symmetric_key, symmetric_key, symmetric_key_len);
+    free(symmetric_key);
+    //From now on it will be used to avoid replay
+    authInstance->counter = 0;
+
+    //ASSIGNED TO SYMMETRIC KEY
+    // get ciphertext Ekas
+    /*unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter, plaintext_buffer, pt_byte_index, authInstance->symmetric_key);
     if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext EpubKeyOpponent\n");
+        printf("Error: Unable to create ciphertext Ekas\n");
+        return NULL;
+    }
+
+    // Allocating enough space for the payload
+printf("Pay_len %d\n",mex->payload_len);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
+
+    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);*/
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if (ciphertext_and_info_buf == NULL) {
+        printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
@@ -3407,135 +3703,9 @@ Message* create_M3_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
     // Allocating enough space for the payload
     mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
 
-    // Start creating payload |EpubKServer(ID_CLIENT ID_SERVER CHallengeA CHallengeS Kas)|
+    // Start creating payload |EKas(ID_MASTER ID_SLAVE)|
     memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
     byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
-
-    // FREE STUFF!!
-    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
-    free(ciphertext_and_info_buf);
-
-    // update values in authInstance
-    authInstance->expected_opcode = (char)M4_CLIENT_CLIENT_AUTH;
-
-    return mex;
-}
-
-int handler_M3_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance, EVP_PKEY* privkey) {
-    // Format mex |123|len|EpubKOpponent(ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab)
-
-    // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
-    int plaintext_size;
-    unsigned char* plaintext = get_asymmetric_decrypted_digital_envelope(ciphertext, ciphertext_size, privkey, &plaintext_size);
-    if (plaintext == NULL) {
-        printf("Error in decryption digital envelope\nAbort\n");
-        return 0;
-    }
-    // extract and verify info in plaintext
-    if (get_and_verify_info_M3_CLIENT_CLIENT_AUTH(plaintext, authInstance) == false) {
-        printf("Not consistent info received in M3 auth protocol\nAbort\n");
-        return 0;
-    }
-
-    return 1;
-}
-
-bool get_and_verify_info_M3_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
-    // Format mex |123|len|EpubKOpponent(ID_LOCAL ID_OPPONENT CHallengeA CHallengeB Kab)
-    // Call on server side
-
-    // declare buffer
-    unsigned char* sender_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* receiver_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* challenge_to_master_rec = (unsigned char*)malloc(CHALLENGE_32);
-    unsigned char* challenge_to_slave_rec = (unsigned char*)malloc(CHALLENGE_32);
-    unsigned char* symmetric_key_rec = (unsigned char*)malloc(GCM_KEY_SIZE);
-
-    int pt_byte_index = 0;
-
-    memcpy(sender_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
-    pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(receiver_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
-    pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(challenge_to_master_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
-    pt_byte_index += CHALLENGE_32;
-
-    memcpy(challenge_to_slave_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
-    pt_byte_index += CHALLENGE_32;
-
-    memcpy(symmetric_key_rec, &(plaintext[pt_byte_index]), GCM_KEY_SIZE);
-    pt_byte_index += GCM_KEY_SIZE;
-
-    if (strncmp(authInstance->nickname_opponent, (char*)sender_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch opponent nickname in M3\n");
-        return false;
-    }
-    if (strncmp(authInstance->nickname_local, (char*)receiver_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch local nickname in M3\n");
-        return false;
-    }
-    if (memcmp(authInstance->challenge_to_opponent, challenge_to_master_rec, CHALLENGE_32) != 0) {
-        printf("Mismatch challenge_to_opponent in M3\n");
-        return false;
-    }
-
-    memcpy(authInstance->challenge_to_local, challenge_to_slave_rec, CHALLENGE_32);
-    memcpy(authInstance->symmetric_key, symmetric_key_rec, GCM_KEY_SIZE);
-
-    free(sender_nickname_rec);
-    free(receiver_nickname_rec);
-    free(challenge_to_master_rec);
-    free(challenge_to_slave_rec);
-    free(symmetric_key_rec);
-    return true;
-}
-
-Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
-    // Mex format |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
-
-    int byte_index = 0;
-    // create returning mex
-    Message* mex = (Message*)malloc(sizeof(Message));
-
-    mex->opcode = (char)M4_CLIENT_CLIENT_AUTH;
-
-    // Start creating plaintext |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH + NICKNAME_LENGTH + CHALLENGE_32);
-    int pt_byte_index = 0;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_local, NICKNAME_LENGTH);
-    pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_opponent, NICKNAME_LENGTH);
-    pt_byte_index += NICKNAME_LENGTH;
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->challenge_to_local, CHALLENGE_32);
-    pt_byte_index += CHALLENGE_32;
-
-    // get ciphertext Ekab
-    //int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter,plaintext_buffer,pt_byte_index, authInstance->symmetric_key);
-    if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekab\n");
-        return NULL;
-    }
-
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
-    // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(mex->payload_len);
-
-    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
-    byte_index += mex->payload_len;
 
     mex->payload_len = byte_index;
 
@@ -3550,18 +3720,28 @@ Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
 }
 
 int handler_M4_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance) {
-    // Format mex |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
+    // Format mex |124|len|EKas(ID_MASTER ID_SLAVE)|
+
+    int symmetric_key_len;
+    unsigned char *symmetric_key = derive_dh_public_key(authInstance->my_dh_private_key, authInstance->peer_dh_pub_key, &symmetric_key_len);
+    //printf("symmetric_key_len %d\n",symmetric_key_len);
+    //BIO_dump_fp(stdout, (const char *)symmetric_key, symmetric_key_len);
+    memcpy(authInstance->symmetric_key, symmetric_key, symmetric_key_len);
+    authInstance->counter = 0;
 
     // get plaintext
     unsigned char* ciphertext = &(payload[0]);
     int ciphertext_size = payload_len;
     int plaintext_size;
 
-    unsigned char* plaintext = extract_gcm_plaintext(M4_CLIENT_CLIENT_AUTH,authInstance->counter,ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_plaintext((char)M4_CLIENT_SERVER_AUTH,authInstance->counter,payload,(int)payload_len, authInstance->symmetric_key, &plaintext_size);
     if (plaintext == NULL) {
         printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
+
+
     // extract and verify info in plaintext
     if (get_and_verify_info_M4_CLIENT_CLIENT_AUTH(plaintext, authInstance) == false) {
         printf("Not consistent info received in M4 auth protocol\nAbort\n");
@@ -3572,40 +3752,165 @@ int handler_M4_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
 }
 
 bool get_and_verify_info_M4_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
-    // Msg format: |124|len|EKab(ID_LOCAL ID_OPPONENT CHallengeB)
+    // Msg format: |124|len|EKas(ID_MASTER ID_SLAVE)|
 
     // declare buffer
-    unsigned char* sender_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* receiver_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* challenge_to_slave_rec = (unsigned char*)malloc(CHALLENGE_32);
+    unsigned char* master_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* slave_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
 
     int pt_byte_index = 0;
 
-    memcpy(sender_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    memcpy(master_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(receiver_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    memcpy(slave_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(challenge_to_slave_rec, &(plaintext[pt_byte_index]), CHALLENGE_32);
-    pt_byte_index += CHALLENGE_32;
 
-    if (strncmp(authInstance->nickname_local, (char*)receiver_nickname_rec, sizeof(NICKNAME_SERVER)) != 0) {
-        printf("Mismatch local nickname in M4\n");
+    if (strncmp(authInstance->nickname_master, (char*)master_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch master nickname in M4\n");
         return false;
     }
-    if (strncmp(authInstance->nickname_opponent, (char*)sender_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch client nickname in M4\n");
-        return false;
-    }
-    if (memcmp(authInstance->challenge_to_opponent, challenge_to_slave_rec, CHALLENGE_32) != 0) {
-        printf("Mismatch challenge_to_opponent in M4\n");
+    if (strncmp(authInstance->nickname_slave, (char*)slave_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch slave nickname in M4\n");
         return false;
     }
 
-    free(sender_nickname_rec);
-    free(receiver_nickname_rec);
-    free(challenge_to_slave_rec);
+    free(master_nickname_rec);
+    free(slave_nickname_rec);
+
+    return true;
+}
+
+
+Message* create_M5_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
+    // Mex format |op|len|EKas(ID_MASTER ID_SLAVE)
+
+    int byte_index = 0;
+    // create returning mex
+    Message* mex = (Message*)malloc(sizeof(Message));
+
+    mex->opcode = (char)M5_CLIENT_CLIENT_AUTH;
+
+    //UPDATE COUNTER MARCO
+    authInstance->counter++;
+
+    // Start creating plaintext |EKas(ID_MASTER ID_SLAVE)
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(2 * NICKNAME_LENGTH);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_master, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_slave, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    //The Kab had been already generated in handler_M4
+
+    //ASSIGNED TO SYMMETRIC KEY
+    // get ciphertext Ekas
+    /*unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter, plaintext_buffer, pt_byte_index, authInstance->symmetric_key);
+    if (ciphertext_and_info_buf == NULL) {
+        printf("Error: Unable to create ciphertext Ekas\n");
+        return NULL;
+    }
+
+    // Allocating enough space for the payload
+printf("Pay_len %d\n",mex->payload_len);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
+
+    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);*/
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if (ciphertext_and_info_buf == NULL) {
+        printf("Error: Unable to create ciphertext Ekas\n");
+        return NULL;
+    }
+
+    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    // to debug
+    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+
+    // Allocating enough space for the payload
+    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+
+    // Start creating payload |EKas(ID_MASTER ID_SLAVE)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    // update values in authInstance
+    authInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_CLIENT_AUTH;  // EXPECTED OPCODE > SUCCESSFUL_CLIENT_SERVER_AUTH
+
+    return mex;
+}
+
+int handler_M5_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstanceToPlay* authInstance) {
+    // Format mex |4|len|EKas(ID_MASTER ID_SLAVE)
+    //server side
+    //UPDATE COUNTER MARCO
+    authInstance->counter++;
+
+    // get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_plaintext((char)M5_CLIENT_SERVER_AUTH,authInstance->counter,payload,(int)payload_len, authInstance->symmetric_key, &plaintext_size);
+    if (plaintext == NULL) {
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
+        return 0;
+    }
+
+
+    // extract and verify info in plaintext
+    if (get_and_verify_info_M5_CLIENT_CLIENT_AUTH(plaintext, authInstance) == false) {
+        printf("Not consistent info received in M5 auth protocol\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M5_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
+    // Call on client side
+
+    // declare buffer |ID_MASTER ID_SLAVE)
+    unsigned char* master_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+    unsigned char* slave_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+
+    int pt_byte_index = 0;
+
+    memcpy(master_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    memcpy(slave_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+
+    if (strncmp(authInstance->nickname_master, (char*)master_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch master nickname in M4\n");
+        return false;
+    }
+    if (strncmp(authInstance->nickname_slave, (char*)slave_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch slave nickname in M4\n");
+        return false;
+    }
+
+    free(master_nickname_rec);
+    free(slave_nickname_rec);
 
     return true;
 }
