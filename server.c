@@ -311,9 +311,11 @@ void *thread_handler_client(void *ptr) {
                     free(authenticationInstance);
                     goto closing_sock;
                 }
-
+                #if defined PROTOCOL_DEBUG
+                        printf("[Self-said %s]: M1_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
+                #endif
                 //send M2
-                mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance);
+                mex_to_send = create_M2_CLIENT_SERVER_AUTH(authenticationInstance,prvkey);
                 if(send_MESSAGE(conn->sock,mex_to_send)){
                     #if defined PROTOCOL_DEBUG
                         printf("[Self-said %s]: M2_CLIENT_SERVER_AUTH sent\n",authenticationInstance->nickname_client);
