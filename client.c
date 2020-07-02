@@ -443,12 +443,8 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                         printf("Insert the adversary username -> ");
 
                         char username_opponent[NICKNAME_LENGTH];
-<<<<<<< HEAD
                         //secure_input(username_opponent, NICKNAME_LENGTH);
                         fgets(username_opponent, NICKNAME_LENGTH, stdin);
-=======
-                        secure_input(username_opponent, NICKNAME_LENGTH);
->>>>>>> 6a845e1dba2acb7a06f92c48d2465baa6c2ce964
                         username_opponent[NICKNAME_LENGTH - 1] = '\0';
 
                         mex = create_M_REQ_PLAY(username_opponent, authenticationInstance);
