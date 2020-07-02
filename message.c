@@ -723,6 +723,139 @@ bool get_and_verify_info_M4_CLIENT_SERVER_AUTH(unsigned char* plaintext, Authent
     return true;
 }
 
+Message* create_M5_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance) {
+    // Mex format |op|len|EKas(ID_SERVER ID_CLIENT)
+
+    int byte_index = 0;
+    // create returning mex
+    Message* mex = (Message*)malloc(sizeof(Message));
+
+    mex->opcode = (char)M5_CLIENT_SERVER_AUTH;
+
+    //UPDATE COUNTER MARCO
+    authInstance->counter++;
+
+    // Start creating plaintext |EKas(ID_SERVER ID_CLIENT)|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(sizeof(NICKNAME_SERVER) + NICKNAME_LENGTH);
+    int pt_byte_index = 0;
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), NICKNAME_SERVER, sizeof(NICKNAME_SERVER));
+    pt_byte_index += sizeof(NICKNAME_SERVER);
+
+    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_client, NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+    //The Kab had been already generated in handler_M4
+
+    //ASSIGNED TO SYMMETRIC KEY
+    // get ciphertext Ekas
+    /*unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter, plaintext_buffer, pt_byte_index, authInstance->symmetric_key);
+    if (ciphertext_and_info_buf == NULL) {
+        printf("Error: Unable to create ciphertext Ekas\n");
+        return NULL;
+    }
+
+    // Allocating enough space for the payload
+printf("Pay_len %d\n",mex->payload_len);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
+
+    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);*/
+    int ciphertext_and_info_buf_size;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    if (ciphertext_and_info_buf == NULL) {
+        printf("Error: Unable to create ciphertext Ekas\n");
+        return NULL;
+    }
+
+    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    // to debug
+    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
+
+    // Allocating enough space for the payload
+    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+
+    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
+    byte_index += ciphertext_and_info_buf_size;
+
+    mex->payload_len = byte_index;
+
+    // FREE STUFF!!
+    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
+    free(ciphertext_and_info_buf);
+
+    // update values in authInstance
+    authInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_SERVER_AUTH;  // EXPECTED OPCODE > SUCCESSFUL_CLIENT_SERVER_AUTH
+
+    return mex;
+}
+
+int handler_M5_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance) {
+    // Format mex |4|len|EKas(ID_SERVER ID_CLIENT)
+    //server side
+    //UPDATE COUNTER MARCO
+    authInstance->counter++;
+
+    // get plaintext
+    unsigned char* ciphertext = &(payload[0]);
+    int ciphertext_size = payload_len;
+    int plaintext_size;
+
+    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_plaintext((char)M5_CLIENT_SERVER_AUTH,authInstance->counter,payload,(int)payload_len, authInstance->symmetric_key, &plaintext_size);
+    if (plaintext == NULL) {
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
+        return 0;
+    }
+
+
+    // extract and verify info in plaintext
+    if (get_and_verify_info_M5_CLIENT_SERVER_AUTH(plaintext, authInstance) == false) {
+        printf("Not consistent info received in M5 auth protocol\nAbort\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+bool get_and_verify_info_M5_CLIENT_SERVER_AUTH(unsigned char* plaintext, AuthenticationInstance* authInstance) {
+    // Call on client side
+
+    // declare buffer
+    unsigned char* server_nickname_rec = (unsigned char*)malloc(sizeof(NICKNAME_SERVER));
+    unsigned char* client_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
+
+    int pt_byte_index = 0;
+
+    memcpy(server_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
+    pt_byte_index += sizeof(NICKNAME_SERVER);
+
+    memcpy(client_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
+    pt_byte_index += NICKNAME_LENGTH;
+
+
+    if (strncmp(authInstance->nickname_server, (char*)server_nickname_rec, sizeof(NICKNAME_SERVER)) != 0) {
+        printf("Mismatch server nickname in M4\n");
+        return false;
+    }
+    if (strncmp(authInstance->nickname_client, (char*)client_nickname_rec, NICKNAME_LENGTH) != 0) {
+        printf("Mismatch client nickname in M4\n");
+        return false;
+    }
+
+    free(server_nickname_rec);
+    free(client_nickname_rec);
+
+    return true;
+}
+
+
 Message* create_M_REQ_LIST(AuthenticationInstance* authInstance) {
     // Mex format |op|len|EKas(NONCE_CLIENT)| //otherwise replay attack
     unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
@@ -3090,7 +3223,7 @@ bool get_and_verify_info_M1_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
     free(nickname_slave_rec);
     return true;
 }
-
+//Da modificare
 Message* create_M2_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance) {
     // Mex format |101|len|EpubKa(ID_LOCAL ID_OPPONENT NONCEa CHallengeA)
 

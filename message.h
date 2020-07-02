@@ -61,6 +61,7 @@ typedef struct {
 #define M2_CLIENT_SERVER_AUTH 101          // |101|len|Cs_len Cs Challenge_A ID_SERVER ID_CLIENT Challenge_S Yserv EprivKeyServer(ID_SERVER ID_CLIENT Challenge_S Yserv) //send the mex also in clear, then verify
 #define M3_CLIENT_SERVER_AUTH 102          // |102|len||ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient Sign_size EprivKeyClient(ID_CLIENT ID_SERVER Challenge_A Yclient_len Yclient)|
 #define M4_CLIENT_SERVER_AUTH 103          // |103|len|EKas(ID_SERVER ID_CLIENT)
+#define M5_CLIENT_SERVER_AUTH 60           // |103|len|EKas(ID_SERVER ID_CLIENT)
 #define SUCCESSFUL_CLIENT_SERVER_AUTH 104  // Expected from now on opcode > SUCCESSFUL_CLIENT_SERVER_AUTH
 
 #define M_LISTEN_PORT_CLIENT_P2P 105  // |106|len|EKas(ID_CLIENT ID_SERVER PORT) //No worry about replay since for definition only once sent
@@ -105,6 +106,9 @@ bool get_and_verify_info_M3_CLIENT_SERVER_AUTH(unsigned char* plaintext, Authent
 Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
 int handler_M4_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance);
 bool get_and_verify_info_M4_CLIENT_SERVER_AUTH(unsigned char* plaintext, AuthenticationInstance* authInstance);
+Message* create_M5_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance);
+int handler_M5_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance);
+bool get_and_verify_info_M5_CLIENT_SERVER_AUTH(unsigned char* plaintext, AuthenticationInstance* authInstance);
 
 Message* create_M_LISTEN_PORT_CLIENT_P2P(int port, AuthenticationInstance* authInstance);
 int handler_M_LISTEN_PORT_CLIENT_P2P(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, int* port);

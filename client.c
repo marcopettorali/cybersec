@@ -336,10 +336,20 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
         close(sock_to_play);
         return;
     }
-    #if defined PROTOCOL_DEBUG
+
+     #if defined PROTOCOL_DEBUG
         printf("M4_CLIENT_SERVER_AUTH handled correctly\n");
     #endif
-        printf(GREEN "**Secure connection established**\n" RESET);
+
+    mex = create_M5_CLIENT_SERVER_AUTH(authenticationInstance);
+    if (send_MESSAGE(sock, mex)){
+        #if defined PROTOCOL_DEBUG
+            printf("M5_CLIENT_SERVER_AUTH sent\n");
+        #endif
+    }
+    free_MESSAGE(&mex);
+
+    printf(GREEN "**Secure connection established**\n" RESET);
 
     //**END AUTHENTICATION AND KEY ESTABLISHMENT
 
