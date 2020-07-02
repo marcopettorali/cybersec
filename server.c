@@ -359,6 +359,20 @@ void *thread_handler_client(void *ptr) {
                     goto closing_sock;
                 }
 
+                read_MESSAGE(conn->sock,mex_received);
+                if((mex_received->opcode != M5_CLIENT_SERVER_AUTH)){
+                    printf("[Self-said %s]: Expected M5_CLIENT_SERVER_AUTH but another mex arrived\nAbort\n",guest_nickname);
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                if( handler_M5_CLIENT_SERVER_AUTH(mex_received->payload,mex_received->payload_len,authenticationInstance) != 1){
+                    free(authenticationInstance);
+                    goto closing_sock;
+                }
+                #if defined PROTOCOL_DEBUG
+                    printf("[Self-said %s]: M5_CLIENT_SERVER_AUTH handled correctly\n",authenticationInstance->nickname_client);
+                #endif
+
                 //subscribe the user's presence since authenticated
                 //PROTECTED BY MUTEX
                 pthread_mutex_lock(&mutex_list_users);
