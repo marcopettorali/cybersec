@@ -16,5 +16,5 @@ int gcm_decrypt(unsigned char* ciphertext, int ciphertext_len, unsigned char* aa
 unsigned char* prepare_gcm_ciphertext(char opcode, int *payload_len ,int counter, unsigned char *plaintext, int plaintext_len, unsigned char *shared_key);
 unsigned char* extract_gcm_plaintext(char opcode, int counter, unsigned char* payload, int payload_len, unsigned char* shared_key, int* plaintext_len);
 
-EVP_PKEY *generate_dh_public_key();
-unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_public_key, EVP_PKEY *peer_dh_public_key, int *shared_key_length);
+EVP_PKEY *generate_dh_public_key(EVP_PKEY *my_dh_private_key, int control);
+unsigned char *derive_dh_public_key(EVP_PKEY *my_dh_private_key, EVP_PKEY *peer_dh_public_key, int *shared_key_length);
