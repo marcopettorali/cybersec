@@ -625,6 +625,9 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                             return;
                         }
 
+                        free_MESSAGE(&mex_received);
+                        mex_received = (Message *)malloc(sizeof(Message));
+
                         #if defined PROTOCOL_DEBUG
                             printf("M_REQ_ACCEPT_PLAY_TO_ACK handled correctly\n");
                         #endif
