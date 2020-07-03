@@ -90,6 +90,14 @@ void *thread_handler_gaming(void *ptr) {
                         pthread_exit(NULL);
                     }
 
+                    mex = create_M5_CLIENT_CLIENT_AUTH(infoToPlay->authenticationInstanceToPlay);
+                    if (send_MESSAGE(infoToPlay->connection->sock, mex)){
+                        #if defined PROTOCOL_DEBUG
+                            printf("M5_CLIENT_CLIENT_AUTH sent\n");
+                        #endif
+                    }
+                    free_MESSAGE(&mex);
+
                     // authentication done: the game can start!
                     if (game_run(&infoToPlay->authenticationInstanceToPlay->nickname_local[0],
                                  &infoToPlay->authenticationInstanceToPlay->nickname_opponent[0],
@@ -157,6 +165,15 @@ void *thread_handler_gaming(void *ptr) {
                         printf("Unable to create M4_CLIENT_CLIENT_AUTH\nAbort\n");
                         pthread_exit(NULL);
                     }
+
+                    read_MESSAGE(infoToPlay->connection->sock,received_msg);
+                    if(received_msg->opcode != M5_CLIENT_CLIENT_AUTH || handler_M5_CLIENT_CLIENT_AUTH(received_msg->payload, received_msg->payload_len, infoToPlay->authenticationInstanceToPlay) != 1){
+                        printf("Unable to handle M5_CLIENT_CLIENT_AUTH correctly\nAbort\n");
+                        pthread_exit(NULL);
+                    }
+                    #if defined PROTOCOL_DEBUG
+                        printf("M5_CLIENT_CLIENT_AUTH correctly handled\n");
+                    #endif
 
                     // authentication done: the game can start!
                     if (game_run(&infoToPlay->authenticationInstanceToPlay->nickname_local[0],
@@ -282,7 +299,7 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
     Message *mex = create_M1_CLIENT_SERVER_AUTH(username_client, authenticationInstance);
     if (send_MESSAGE(sock, mex)){
         #if defined PROTOCOL_DEBUG
-            printf("M1 sent\n");
+            printf("M1_CLIENT_SERVER sent\n");
         #endif
     }
     free_MESSAGE(&mex);
@@ -656,10 +673,8 @@ void handling_connection_to_server(char *buffer, char *command, int port_p2p) {
                                 printf("The server has sent the opponent's info (slave)\n");
                                 #endif
                                 read_MESSAGE_payload(sock, mex_received);
-                                printf("mex_received->payload_len %d\n",mex_received->payload_len);
-                                BIO_dump_fp(stdout, (const char *)mex_received->payload, mex_received->payload_len);
-                                printf("Read M_PRELIMINARY_INFO_OPPONENT\n");
-                                
+                                  
+                                authenticationInstanceToPlay = (AuthenticationInstanceToPlay *)malloc(sizeof(AuthenticationInstanceToPlay));
 
                                 if (handler_M_PRELIMINARY_INFO_OPPONENT(mex_received->payload, mex_received->payload_len, authenticationInstance,
                                                                         authenticationInstanceToPlay) != 1) {

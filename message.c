@@ -325,7 +325,7 @@ int handler_M2_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_l
         return 0;
     }
 
-    printf("Successufl verification of sign\n");
+    //printf("Successufl verification of sign\n");
     // extract and verify info in buffer_signed
     if (get_and_verify_info_M2_CLIENT_SERVER_AUTH(buffer_signed, authInstance) == false) {
         printf("Not consistent info received in M2_CLIENT_SERVER_AUTH\nAbort\n");
@@ -530,7 +530,7 @@ int handler_M3_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_l
         return 0;
     }
 
-    printf("[Self-said %s]:Successufl verification of signature\n", authInstance->nickname_client);
+    //printf("[Self-said %s]:Successufl verification of signature\n", authInstance->nickname_client);
     // extract and verify info in buffer_signed
 
     if (get_and_verify_info_M3_CLIENT_SERVER_AUTH(buffer_signed, authInstance) == false) {
@@ -627,7 +627,6 @@ Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance) {
     }
 
     // Allocating enough space for the payload
-    printf("Pay_len %d\n", mex->payload_len);
     mex->payload = (unsigned char*)malloc(mex->payload_len);
 
     // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
@@ -637,27 +636,6 @@ Message* create_M4_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance) {
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
     free(ciphertext_and_info_buf);
-    /*int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key,
-    &ciphertext_and_info_buf_size); if (ciphertext_and_info_buf == NULL) { printf("Error: Unable to create ciphertext Ekas\n"); return NULL;
-    }
-
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
-    // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
-
-    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
-
-    // FREE STUFF!!
-    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
-    free(ciphertext_and_info_buf);*/
 
     // update values in authInstance
     authInstance->expected_opcode = (char)SUCCESSFUL_CLIENT_SERVER_AUTH;  // EXPECTED OPCODE > SUCCESSFUL_CLIENT_SERVER_AUTH
@@ -751,44 +729,20 @@ Message* create_M5_CLIENT_SERVER_AUTH(AuthenticationInstance* authInstance) {
 
     //The Kab had been already generated in handler_M4
 
-    //ASSIGNED TO SYMMETRIC KEY
     // get ciphertext Ekas
-    /*unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter, plaintext_buffer, pt_byte_index, authInstance->symmetric_key);
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
         printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
     // Allocating enough space for the payload
-printf("Pay_len %d\n",mex->payload_len);
     mex->payload = (unsigned char*)malloc(mex->payload_len);
 
     // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
     memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
     byte_index += mex->payload_len;
-
-    // FREE STUFF!!
-    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
-    free(ciphertext_and_info_buf);*/
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
-    if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas\n");
-        return NULL;
-    }
-
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
-    // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
-
-    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
@@ -807,17 +761,15 @@ int handler_M5_CLIENT_SERVER_AUTH(unsigned char* payload, unsigned int payload_l
     authInstance->counter++;
 
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
     int plaintext_size;
 
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
-    //unsigned char* plaintext = extract_gcm_plaintext((char)M5_CLIENT_SERVER_AUTH,authInstance->counter,payload,(int)payload_len, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M5_CLIENT_SERVER_AUTH,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
         printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
-
 
     // extract and verify info in plaintext
     if (get_and_verify_info_M5_CLIENT_SERVER_AUTH(plaintext, authInstance) == false) {
@@ -1184,70 +1136,56 @@ bool get_and_verify_info_M_RES_LIST(unsigned char* plaintext, int plaintext_size
 }
 
 Message* create_M_REQ_PLAY(char* username_opponent, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(ID_OPPONENT NONCE_CLIENT)|
-    unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
+    // Mex format |op|len|EKas(ID_OPPONENT)|
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
 
     mex->opcode = M_REQ_PLAY;
 
-    // Start creating plaintext |ID_OPPONENT NONCE_CLIENT|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH + NONCE_32);
+    // Start creating plaintext |ID_OPPONENT|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH);
     int pt_byte_index = 0;
 
     memcpy(&(plaintext_buffer[pt_byte_index]), username_opponent, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    generate_nonce(&nonce, NONCE_32);
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
-    pt_byte_index += NONCE_32;
-
     // get ciphertext Ekas
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf =
-        prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    authInstance->counter++;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas in M_REQ_PLAY\n");
+        printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
 
-    // Start creating payload |EKas(ID_OPPONENT NONCE_CLIENT)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
+    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
     free(ciphertext_and_info_buf);
     // Adjust authInstance param to save the sent nonce
-    memcpy(authInstance->nonce_client, nonce, NONCE_32);
     memcpy(authInstance->nickname_opponent_required, username_opponent, NICKNAME_LENGTH);
 
-    free(nonce);
     return mex;
 }
 
 int handler_M_REQ_PLAY(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(ID_OPPONENT NONCE_CLIENT)|
+    // Mex format |op|len|EKas(ID_OPPONENT)|
 
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
+    authInstance->counter++;
     int plaintext_size;
-
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M_REQ_PLAY,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
-        printf("Error in decryption symmetric ciphertext M_REQ_PLAY\nAbort\n");
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
     // extract and verify info in plaintext
@@ -1263,18 +1201,11 @@ bool get_and_verify_info_M_REQ_PLAY(unsigned char* plaintext, AuthenticationInst
     // Call on server side
 
     unsigned char* opponent_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_client_rec = (unsigned char*)malloc(NONCE_32);
 
     int pt_byte_index = 0;
 
     memcpy(opponent_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
-
-    /*memcpy(server_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
-    pt_byte_index+= sizeof(NICKNAME_SERVER);*/
-
-    memcpy(nonce_client_rec, &(plaintext[pt_byte_index]), NONCE_32);
-    pt_byte_index += NONCE_32;
 
     // if(strncmp(authInstance->nickname_client,(char *)client_nickname_rec,NICKNAME_LENGTH)!=0){printf("Mismatch client nickname in
     // M_REQ_LIST\n");return false;} if(strncmp(authInstance->nickname_server,(char
@@ -1284,10 +1215,8 @@ bool get_and_verify_info_M_REQ_PLAY(unsigned char* plaintext, AuthenticationInst
         return false;
     }
 
-    memcpy(authInstance->nonce_client, nonce_client_rec, NONCE_32);
     memcpy(authInstance->nickname_opponent_required, opponent_nickname_rec, NICKNAME_LENGTH);
 
-    free(nonce_client_rec);
     free(opponent_nickname_rec);
 
     return true;
@@ -1502,70 +1431,56 @@ bool get_and_verify_info_M_RES_PLAY_ACK(unsigned char* plaintext, Authentication
 }
 
 Message* create_M_REQ_ACCEPT_PLAY_TO_ACK(char* username_opponent, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(ID_OPPONENT NONCE_SERVER)|
-    unsigned char* nonce = (unsigned char*)malloc(NONCE_32);
+    // Mex format |op|len|EKas(ID_OPPONENT)|
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
 
     mex->opcode = M_REQ_ACCEPT_PLAY_TO_ACK;
 
-    // Start creating plaintext |ID_OPPONENT NONCE_SERVER|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH + NONCE_32);
+    // Start creating plaintext |ID_OPPONENT|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(NICKNAME_LENGTH);
     int pt_byte_index = 0;
 
     memcpy(&(plaintext_buffer[pt_byte_index]), username_opponent, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    generate_nonce(&nonce, NONCE_32);
-
-    memcpy(&(plaintext_buffer[pt_byte_index]), &nonce[0], NONCE_32);
-    pt_byte_index += NONCE_32;
-
     // get ciphertext Ekas
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf =
-        prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    authInstance->counter++;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas in M_REQ_ACCEPT_PLAY_TO_ACK\n");
+        printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
 
-    // Start creating payload |EKas(ID_OPPONENT NONCE_SERVER)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
+    // Start creating payload |ID_OPPONENT|
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
     free(ciphertext_and_info_buf);
     // Adjust authInstance param to save the sent nonce
-    memcpy(authInstance->nonce_server, nonce, NONCE_32);
     memcpy(authInstance->nickname_opponent_required, username_opponent, NICKNAME_LENGTH);
 
-    free(nonce);
     return mex;
 }
 
 int handler_M_REQ_ACCEPT_PLAY_TO_ACK(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(ID_OPPONENT NONCE_SERVER)|
+    // Mex format |op|len|EKas(ID_OPPONENT)|
 
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
+    authInstance->counter++;
     int plaintext_size;
-
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M_REQ_ACCEPT_PLAY_TO_ACK,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
-        printf("Error in decryption symmetric ciphertext M_REQ_ACCEPT_PLAY_TO_ACK\nAbort\n");
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
     // extract and verify info in plaintext
@@ -1581,30 +1496,21 @@ bool get_and_verify_info_M_REQ_ACCEPT_PLAY_TO_ACK(unsigned char* plaintext, Auth
     // Call on client side
 
     unsigned char* opponent_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
 
     int pt_byte_index = 0;
 
     memcpy(opponent_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    /*memcpy(server_nickname_rec, &(plaintext[pt_byte_index]), sizeof(NICKNAME_SERVER));
-    pt_byte_index+= sizeof(NICKNAME_SERVER);*/
-
-    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]), NONCE_32);
-    pt_byte_index += NONCE_32;
-
-    memcpy(authInstance->nonce_server, nonce_server_rec, NONCE_32);
     memcpy(authInstance->nickname_opponent_required, opponent_nickname_rec, NICKNAME_LENGTH);
 
-    free(nonce_server_rec);
     free(opponent_nickname_rec);
 
     return true;
 }
 
 Message* create_M_RES_ACCEPT_PLAY_ACK(char answer, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(ANSWRE_1BYTE ID_OPPONENT NONCE_SERVER)|
+    // Mex format |op|len|EKas(ANSWRE_1BYTE ID_OPPONENT)|
 
     int byte_index = 0;
     // create returning mex
@@ -1612,8 +1518,8 @@ Message* create_M_RES_ACCEPT_PLAY_ACK(char answer, AuthenticationInstance* authI
 
     mex->opcode = M_RES_ACCEPT_PLAY_ACK;
 
-    // Start creating plaintext |ID_OPPONENT NONCE_SERVER|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(sizeof(char) + NICKNAME_LENGTH + NONCE_32);
+    // Start creating plaintext |ANSWRE_1BYTE ID_OPPONENT|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(sizeof(char) + NICKNAME_LENGTH);
     int pt_byte_index = 0;
 
     memcpy(&(plaintext_buffer[pt_byte_index]), &answer, sizeof(char));
@@ -1622,30 +1528,21 @@ Message* create_M_RES_ACCEPT_PLAY_ACK(char answer, AuthenticationInstance* authI
     memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_opponent_required, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_server, NONCE_32);
-    pt_byte_index += NONCE_32;
-
     // get ciphertext Ekas
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf =
-        prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    authInstance->counter++;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas in M_RES_ACCEPT_PLAY_ACK\n");
+        printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
 
-    // Start creating payload |EKas(ID_OPPONENT NONCE_SERVER)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
+    // Start creating payload |ANSWRE_1BYTE ID_OPPONENT|
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
@@ -1655,16 +1552,16 @@ Message* create_M_RES_ACCEPT_PLAY_ACK(char answer, AuthenticationInstance* authI
 }
 
 int handler_M_RES_ACCEPT_PLAY_ACK(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, char* answer) {
-    // Mex format |op|len|EKas(ANSWRE_1BYTE ID_OPPONENT NONCE_SERVER)|
+    // Mex format |op|len|EKas(ANSWRE_1BYTE ID_OPPONENT)|
 
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
+    authInstance->counter++;
     int plaintext_size;
-
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M_RES_ACCEPT_PLAY_ACK,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
-        printf("Error in decryption symmetric ciphertext M_RES_ACCEPT_PLAY_ACK\nAbort\n");
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
     // extract and verify info in plaintext
@@ -1677,10 +1574,9 @@ int handler_M_RES_ACCEPT_PLAY_ACK(unsigned char* payload, unsigned int payload_l
 }
 
 bool get_and_verify_info_M_RES_ACCEPT_PLAY_ACK(unsigned char* plaintext, AuthenticationInstance* authInstance, char* answer) {
-    // Call on server side  (ANSWRE_1BYTE ID_OPPONENT NONCE_SERVER)
+    // Call on server side  (ANSWRE_1BYTE ID_OPPONENT)
 
     unsigned char* opponent_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_server_rec = (unsigned char*)malloc(NONCE_32);
 
     int pt_byte_index = 0;
 
@@ -1690,34 +1586,26 @@ bool get_and_verify_info_M_RES_ACCEPT_PLAY_ACK(unsigned char* plaintext, Authent
     memcpy(opponent_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(nonce_server_rec, &(plaintext[pt_byte_index]), NONCE_32);
-    pt_byte_index += NONCE_32;
-
     if (strncmp(authInstance->nickname_opponent_required, (char*)opponent_nickname_rec, NICKNAME_LENGTH) != 0) {
         printf("Mismatch opponent nickname in M_RES_ACCEPT_PLAY_ACK\n");
         return false;
     }
-    if (memcmp(authInstance->nonce_server, nonce_server_rec, NONCE_32) != 0) {
-        printf("Mismatch nonce_server in M_RES_ACCEPT_PLAY_ACK\n");
-        return false;
-    }
 
-    free(nonce_server_rec);
     free(opponent_nickname_rec);
 
     return true;
 }
 
 Message* create_M_RES_PLAY_OPPONENT(char response, int opponent_port, AuthenticationInstance* authInstance) {
-    // Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
+    // Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT)|
     int byte_index = 0;
     // create returning mex
     Message* mex = (Message*)malloc(sizeof(Message));
 
     mex->opcode = M_RES_PLAY_OPPONENT;
 
-    // Start creating plaintext |RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT|
-    unsigned char* plaintext_buffer = (unsigned char*)malloc(sizeof(char) + sizeof(int) + NICKNAME_LENGTH + NONCE_32);
+    // Start creating plaintext |RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT|
+    unsigned char* plaintext_buffer = (unsigned char*)malloc(sizeof(char) + sizeof(int) + NICKNAME_LENGTH);
     int pt_byte_index = 0;
 
     memcpy(&(plaintext_buffer[pt_byte_index]), &response, sizeof(char));
@@ -1729,30 +1617,21 @@ Message* create_M_RES_PLAY_OPPONENT(char response, int opponent_port, Authentica
     memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nickname_opponent_required, NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(&(plaintext_buffer[pt_byte_index]), authInstance->nonce_client, NONCE_32);
-    pt_byte_index += NONCE_32;
-
     // get ciphertext Ekas
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf =
-        prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    authInstance->counter++;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas in M_RES_PLAY_OPPONENT\n");
+        printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
 
-    // Start creating payload |EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
+    // Start creating payload |RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT|
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
@@ -1763,16 +1642,16 @@ Message* create_M_RES_PLAY_OPPONENT(char response, int opponent_port, Authentica
 
 int handler_M_RES_PLAY_OPPONENT(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance, char* answer,
                                 int* opponent_port) {
-    // Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT)|
+    // Mex format |op|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT)|
 
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
+    authInstance->counter++;
     int plaintext_size;
-
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M_RES_PLAY_OPPONENT,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
-        printf("Error in decryption symmetric ciphertext M_RES_PLAY_OPPONENT\nAbort\n");
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
     // extract and verify info in plaintext
@@ -1785,12 +1664,11 @@ int handler_M_RES_PLAY_OPPONENT(unsigned char* payload, unsigned int payload_len
 }
 
 bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char* plaintext, AuthenticationInstance* authInstance, char* answer, int* opponent_port) {
-    // Call on client side RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_SERVER NONCE_CLIENT
+    // Call on client side RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT
 
     char* response_rec = (char*)malloc(sizeof(char));
     int* opponent_port_rec = (int*)malloc(sizeof(int));
     unsigned char* opponent_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
-    unsigned char* nonce_client_rec = (unsigned char*)malloc(NONCE_32);
 
     int pt_byte_index = 0;
 
@@ -1803,16 +1681,9 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char* plaintext, Authentic
     memcpy(opponent_nickname_rec, &(plaintext[pt_byte_index]), NICKNAME_LENGTH);
     pt_byte_index += NICKNAME_LENGTH;
 
-    memcpy(nonce_client_rec, &(plaintext[pt_byte_index]), NONCE_32);
-    pt_byte_index += NONCE_32;
-
     // check
     if (strncmp(authInstance->nickname_opponent_required, (char*)opponent_nickname_rec, NICKNAME_LENGTH) != 0) {
         printf("Mismatch opponent nickname in M_RES_PLAY_OPPONENT\n");
-        return false;
-    }
-    if (memcmp(authInstance->nonce_client, nonce_client_rec, NONCE_32) != 0) {
-        printf("Mismatch nonce_client in M_RES_PLAY_OPPONENT\n");
         return false;
     }
 
@@ -1823,7 +1694,6 @@ bool get_and_verify_info_M_RES_PLAY_OPPONENT(unsigned char* plaintext, Authentic
     free(response_rec);
     free(opponent_port_rec);
     free(opponent_nickname_rec);
-    free(nonce_client_rec);
 
     return true;
 }
@@ -1856,26 +1726,20 @@ Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, Authenti
     pt_byte_index += lenght_pub_key;
 
     // get ciphertext Ekas
-    int ciphertext_and_info_buf_size;
-    unsigned char* ciphertext_and_info_buf =
-        prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
+    authInstance->counter++;
+    unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode, (int*)&(mex->payload_len), authInstance->counter,
+                                                                        &plaintext_buffer[0], pt_byte_index, &authInstance->symmetric_key[0]);
     if (ciphertext_and_info_buf == NULL) {
         printf("Error: Unable to create ciphertext Ekas\n");
         return NULL;
     }
 
-    // BIO_dump_fp(stdout, (const char *)ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    // to debug
-    // BIO_dump_fp(stdout, (const char *)mex->payload, mex->payload_len);
-
     // Allocating enough space for the payload
-    mex->payload = (unsigned char*)malloc(ciphertext_and_info_buf_size);
+    mex->payload = (unsigned char*)malloc(mex->payload_len);
 
-    // Start creating payload |EKas(ID_LOCAL ID_OPPONENT length_pub_key PUBKeyOPPONENT)|
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, ciphertext_and_info_buf_size);
-    byte_index += ciphertext_and_info_buf_size;
-
-    mex->payload_len = byte_index;
+    // Start creating payload (ID_LOCAL ID_OPPONENT length_pub_key PUBKeyOPPONENT)
+    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
+    byte_index += mex->payload_len;
 
     // FREE STUFF!!
     // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
@@ -1889,24 +1753,22 @@ Message* create_M_PRELIMINARY_INFO_OPPONENT(EVP_PKEY* opponent_pub_key, Authenti
 int handler_M_PRELIMINARY_INFO_OPPONENT(unsigned char* payload, unsigned int payload_len, AuthenticationInstance* authInstance,
                                         AuthenticationInstanceToPlay* authInstanceToPlay) {
     // Mex format |op|len|EKas(ID_LOCAL ID_OPPONENT length_pub_key PUBKeyOPPONENT)|
-printf("Dentro handler_M_PRELIMINARY_INFO_OPPONENT");
     // get plaintext
-    unsigned char* ciphertext = &(payload[0]);
-    int ciphertext_size = payload_len;
+    authInstance->counter++;
     int plaintext_size;
-printf("dopo allocazione ");
-    unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    //unsigned char* plaintext = extract_gcm_ciphertext(ciphertext, ciphertext_size, authInstance->symmetric_key, &plaintext_size);
+    unsigned char* plaintext = extract_gcm_plaintext((char)M_PRELIMINARY_INFO_OPPONENT,authInstance->counter,&payload[0],(int)payload_len,
+     &authInstance->symmetric_key[0], &plaintext_size);
     if (plaintext == NULL) {
-        printf("Error in decryption symmetric ciphertext M_PRELIMINARY_INFO_OPPONENT\nAbort\n");
+        printf("Error in decryption symmetric ciphertext\nAbort\n");
         return 0;
     }
-printf("prima get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT");
     // extract and verify info in plaintext
     if (get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT(plaintext, authInstance, authInstanceToPlay) == false) {
         printf("Not consistent info received in M_PRELIMINARY_INFO_OPPONENT\nAbort\n");
         return 0;
     }
-printf("fine handler_M_PRELIMINARY_INFO_OPPONENT");
+
     return 1;
 }
 
@@ -1936,7 +1798,9 @@ bool get_and_verify_info_M_PRELIMINARY_INFO_OPPONENT(unsigned char* plaintext, A
 
     // deserialize pub_key_rec and copy it in authInstanceToPlay
     authInstanceToPlay->opponent_pub_key = deserialize_PEM_Pub_Key(length_pub_key, pub_key_buff_rec);
+
     memcpy(authInstanceToPlay->nickname_local, local_nickname_rec, NICKNAME_LENGTH);
+
     memcpy(authInstanceToPlay->nickname_opponent, opponent_nickname_rec, NICKNAME_LENGTH);
 
     free(local_nickname_rec);
@@ -3399,7 +3263,7 @@ int handler_M2_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
         return 0;
     }
 
-    printf("Successufl verification of sign\n");
+    //printf("Successufl verification of sign\n");
     // extract and verify info in buffer_signed
     if (get_and_verify_info_M2_CLIENT_CLIENT_AUTH(buffer_signed, authInstance) == false) {
         printf("Not consistent info received in M2_CLIENT_CLIENT_AUTH\nAbort\n");
@@ -3603,7 +3467,7 @@ int handler_M3_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
         return 0;
     }
 
-    printf("Successufl verification of signature\n");
+    //printf("Successufl verification of signature\n");
     // extract and verify info in buffer_signed
 
     if (get_and_verify_info_M3_CLIENT_CLIENT_AUTH(buffer_signed, authInstance) == false) {
@@ -3683,7 +3547,7 @@ Message* create_M4_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
     int symmetric_key_len;
     unsigned char *symmetric_key = derive_dh_public_key(authInstance->my_dh_private_key, authInstance->peer_dh_pub_key, &symmetric_key_len);
     //printf("symmetric_key_len %d\n",symmetric_key_len);
-BIO_dump_fp(stdout, (const char *)symmetric_key, symmetric_key_len);
+    //BIO_dump_fp(stdout, (const char *)symmetric_key, symmetric_key_len);
     memcpy(authInstance->symmetric_key, symmetric_key, symmetric_key_len);
     free(symmetric_key);
     //From now on it will be used to avoid replay
@@ -3698,7 +3562,6 @@ BIO_dump_fp(stdout, (const char *)symmetric_key, symmetric_key_len);
     }
 
     // Allocating enough space for the payload
-printf("Pay_len %d\n",mex->payload_len);
     mex->payload = (unsigned char*)malloc(mex->payload_len);
 
     // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
@@ -3825,25 +3688,6 @@ Message* create_M5_CLIENT_CLIENT_AUTH(AuthenticationInstanceToPlay* authInstance
 
     //The Kab had been already generated in handler_M4
 
-    //ASSIGNED TO SYMMETRIC KEY
-    // get ciphertext Ekas
-    /*unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext_new(mex->opcode,(int*)&(mex->payload_len),authInstance->counter, plaintext_buffer, pt_byte_index, authInstance->symmetric_key);
-    if (ciphertext_and_info_buf == NULL) {
-        printf("Error: Unable to create ciphertext Ekas\n");
-        return NULL;
-    }
-
-    // Allocating enough space for the payload
-printf("Pay_len %d\n",mex->payload_len);
-    mex->payload = (unsigned char*)malloc(mex->payload_len);
-
-    // Start creating payload |EKas(ID_SERVER ID_CLIENT CHallengeS)
-    memcpy(&(mex->payload[byte_index]), ciphertext_and_info_buf, mex->payload_len);
-    byte_index += mex->payload_len;
-
-    // FREE STUFF!!
-    // free(plaintext_buffer); //already freed by get_asymmetric_encrypted_digital_envelope(..)
-    free(ciphertext_and_info_buf);*/
     int ciphertext_and_info_buf_size;
     unsigned char* ciphertext_and_info_buf = prepare_gcm_ciphertext(plaintext_buffer, pt_byte_index, authInstance->symmetric_key, &ciphertext_and_info_buf_size);
     if (ciphertext_and_info_buf == NULL) {
@@ -3905,7 +3749,7 @@ int handler_M5_CLIENT_CLIENT_AUTH(unsigned char* payload, unsigned int payload_l
 bool get_and_verify_info_M5_CLIENT_CLIENT_AUTH(unsigned char* plaintext, AuthenticationInstanceToPlay* authInstance) {
     // Call on client side
 
-    // declare buffer |ID_MASTER ID_SLAVE)
+    // declare buffer |ID_MASTER ID_SLAVE|
     unsigned char* master_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
     unsigned char* slave_nickname_rec = (unsigned char*)malloc(NICKNAME_LENGTH);
 
@@ -3919,11 +3763,11 @@ bool get_and_verify_info_M5_CLIENT_CLIENT_AUTH(unsigned char* plaintext, Authent
 
 
     if (strncmp(authInstance->nickname_master, (char*)master_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch master nickname in M4\n");
+        printf("Mismatch master nickname in M5\n");
         return false;
     }
     if (strncmp(authInstance->nickname_slave, (char*)slave_nickname_rec, NICKNAME_LENGTH) != 0) {
-        printf("Mismatch slave nickname in M4\n");
+        printf("Mismatch slave nickname in M5\n");
         return false;
     }
 
