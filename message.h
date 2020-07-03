@@ -73,12 +73,12 @@ typedef struct {
 #define M_REQ_LIST 107  // |107|len|EKas(NONCE_CLIENT) //NO ID_CLIENT ID_SERVER since Kas already link this two entities
 #define M_RES_LIST 108  // |108|len|EKas(NONCE_CLIENT list) //NO ID_CLIENT ID_SERVER since Kas already link this two entities
 
-#define M_REQ_PLAY 109  // |109|len|EKas(ID_OPPONENT NONCE_CLIENT) //Nonce client is to avoid replay of requests (so to be forced to play always with the same opponent) //to ensure freshness of server's response
+#define M_REQ_PLAY 109  // |109|len|EKas(ID_OPPONENT)****
 #define M_RES_PLAY_TO_ACK 110  // |110|len|EKas(ID_OPPONENT NONCE_CLIENT NONCE_SERVER) //Nonce server is to ensure freshness from server side (otherwise if already requested to play an enemy could force the same player to play always with the prevoius target)
 #define M_RES_PLAY_ACK 111  // |111|len|EKas(ID_OPPONENT NONCE_SERVER) //to prove freshness to server
-#define M_REQ_ACCEPT_PLAY_TO_ACK 112  // |112|len|EKas(ID_OPPONENT NONCE_SERVER) //ask the guest if he wants to pla with ID_OPPONENT //to prove freshness to server 
-#define M_RES_ACCEPT_PLAY_ACK 113  // |113|len|EKas(RESPONSE_1BYTE ID_OPPONENT NONCE_SERVER)
-#define M_RES_PLAY_OPPONENT 114  // |114|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT NONCE_CLIENT) //real answer of M_REQ_PLAY
+#define M_REQ_ACCEPT_PLAY_TO_ACK 112  // |112|len|EKas(ID_OPPONENT) //ask the guest if he wants to pla with ID_OPPONENT ****
+#define M_RES_ACCEPT_PLAY_ACK 113  // |113|len|EKas(RESPONSE_1BYTE ID_OPPONENT) *****
+#define M_RES_PLAY_OPPONENT 114  // |114|len|EKas(RESPONSE_1BYTE OPPONENT_PORT(INT) ID_OPPONENT) //real answer of M_REQ_PLAY *****
 
 #define M_PRELIMINARY_INFO_OPPONENT 30  // |30|len|EKas(ID_LOCAL ID_OPPONENT PUBkeyOPPONENT)|
 

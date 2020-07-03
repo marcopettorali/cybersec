@@ -164,8 +164,8 @@ unsigned char *prepare_gcm_ciphertext_new(char opcode, int *ciphertext_len, int 
     memcpy(&ciphertext[ct_index], tag, GCM_TAG_SIZE);
     ct_index += GCM_TAG_SIZE;
 
-    printf("PREPARE:\n");
-    BIO_dump_fp(stdout, (const char *)&ciphertext[0], GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
+    //printf("PREPARE:\n");
+    //BIO_dump_fp(stdout, (const char *)&ciphertext[0], GCM_IV_SIZE + GCM_TAG_SIZE + plaintext_len);
 
     return ciphertext;
 }
