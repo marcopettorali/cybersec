@@ -45,4 +45,4 @@ server_verbose : server.c util.c list.c message.c net.c pub_key_crypto.c crypto.
 # files and *~ backup files:
 
 clean : 
-	$(RM) count *.o *~ *.exe
+	$(RM) count *.o *~ *.exe *.exe.stackdump
